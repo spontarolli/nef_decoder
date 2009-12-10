@@ -1,0 +1,97 @@
+Loading NIKON D300 image from NK3_1368.NEF ...
+tag=0x8c, meta_offset=1920
+tag=0x96, meta_offset=7812
+meta_offset=7812, tiff_bps=14, ver0=68, ver1=32
+csize=257, step=64, split=0, huff=3
+
+Loading NIKON D300 image from NK3_1364.NEF ...
+tag=0x8c, meta_offset=1920
+tag=0x96, meta_offset=7812
+meta_offset=7812, tiff_bps=12, ver0=70, ver1=48
+csize=32, step=132, split=0, huff=2
+
+Loading NIKON D300 image from NK3_1359.NEF ...
+tag=0x8c, meta_offset=1920
+tag=0x96, meta_offset=7812
+meta_offset=7812, tiff_bps=14, ver0=70, ver1=48
+csize=34, step=496, split=0, huff=5
+
+Loading NIKON D300 image from NK3_1365.NEF ...
+tag=0x8c, meta_offset=1920
+tag=0x96, meta_offset=7812
+meta_offset=7812, tiff_bps=12, ver0=68, ver1=32
+csize=257, step=16, split=0, huff=0
+
+Loading NIKON D300 image from NK3_1366.NEF ...
+tag=0x8c, meta_offset=1896
+Scaling with darkness 0, saturation 4095, and
+
+Loading NIKON D300 image from NK3_1367.NEF ...
+tag=0x8c, meta_offset=1896
+Scaling with darkness 0, saturation 16383, and
+
+tag=0x8c, meta_offset=2016
+tag=0x96, meta_offset=8016
+Loading NIKON D3X image from D3XFARI0050.NEF ...
+meta_offset=8016, tiff_bps=12, ver0=0x46, ver1=0x30
+csize=32, step=132, split=0, huff=2
+
+tag=0x96, meta_offset=5972
+Loading NIKON D100 image from DSC_0001.NEF ...
+meta_offset=5972, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=567, step=7, split=0, huff=0
+
+tag=0x96, meta_offset=5972
+Loading NIKON D100 image from DSC_0002.NEF ...
+meta_offset=5972, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=567, step=7, split=0, huff=0
+
+tag=0x8c, meta_offset=1864
+tag=0x96, meta_offset=6840
+Loading NIKON D200 image from d200_DSC0002.NEF ...
+meta_offset=6840, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=683, step=6, split=0, huff=0
+
+tag=0x8c, meta_offset=1884
+tag=0x96, meta_offset=6708
+Loading NIKON D2X image from D2X_50_1.4@2.8_Andreas_Sturm.NEF ...
+meta_offset=6708, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=683, step=6, split=0, huff=0
+
+Loading NIKON D5000 image from D5000FAR4288F.NEF ...
+meta_offset=9404, tiff_bps=12, ver0=0x44, ver1=0x20
+csize=257, step=16, split=0, huff=0
+
+tag=0x8c, meta_offset=1828
+tag=0x96, meta_offset=11276
+Loading NIKON D40X image from d40x_DSC_0001.NEF ...
+meta_offset=11276, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=683, step=6, split=0, huff=0
+
+Loading NIKON D40 image from d40_DSC_0462.NEF ...
+meta_offset=11232, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=683, step=6, split=0, huff=0
+
+tag=0x8c, meta_offset=2052
+tag=0x96, meta_offset=7948
+Loading NIKON D700 image from D700FAR4256.NEF ...
+meta_offset=7948, tiff_bps=14, ver0=0x46, ver1=0x30
+csize=34, step=496, split=0, huff=5
+
+tag=0x8c, meta_offset=1872
+tag=0x96, meta_offset=11316
+Loading NIKON D80 image from d80_DSC_1152.NEF ...
+meta_offset=11316, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=683, step=6, split=0, huff=0
+
+tag=0x8c, meta_offset=2028
+tag=0x96, meta_offset=9216
+Loading NIKON D90 image from d90_DSC_0003.NEF ...
+meta_offset=9216, tiff_bps=12, ver0=0x44, ver1=0x20
+csize=257, step=16, split=0, huff=0
+
+tag=0x8c, meta_offset=1928
+tag=0x96, meta_offset=11384
+Loading NIKON D60 image from ../Dcraw/nef/D60_0235_ISO0100.NEF ...
+meta_offset=11384, tiff_bps=12, ver0=0x44, ver1=0x10
+csize=683, step=6, split=0, huff=0

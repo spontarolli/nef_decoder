@@ -1,0 +1,163 @@
+
+IFD #0, nEntries=25
+tag=0x00fe/  254 type= 4 len=    1 val=0x0001/1
+tag=0x0100/  256 type= 4 len=    1 val=0x00a0/160
+tag=0x0101/  257 type= 4 len=    1 val=0x0078/120
+tag=0x0102/  258 type= 3 len=    3 offset=0x013c/316, [8/8 8/8 8/8 ]
+tag=0x0103/  259 type= 3 len=    1 val=0x0001/1
+tag=0x0106/  262 type= 3 len=    1 val=0x0002/2
+tag=0x010f/  271 "NIKON CORPORATION."
+tag=0x0110/  272 "NIKON D2X."
+tag=0x0111/  273 type= 4 len=    1 val=0x210ba/135354
+tag=0x0112/  274 type= 3 len=    1 val=0x0001/1
+tag=0x0115/  277 type= 3 len=    1 val=0x0003/3
+tag=0x0116/  278 type= 4 len=    1 val=0x0078/120
+tag=0x0117/  279 type= 4 len=    1 val=0xe100/57600
+tag=0x011a/  282 type= 5 len=    1 val=0x0164/356
+tag=0x011b/  283 type= 5 len=    1 val=0x016c/364
+tag=0x011c/  284 type= 3 len=    1 val=0x0001/1
+tag=0x0128/  296 type= 3 len=    1 val=0x0002/2
+tag=0x0131/  305 "Ver.2.00 ."
+tag=0x0132/  306 "2007:10:14 14:34:06."
+tag=0x014a/  330 type= 4 len=    2 val=0x0194/404
+Start of subifd 0 (offset 0x2f1cc)
+nEntries=8
+tag=0x00fe/  254 type= 4 len=    1 val=0x0001/1
+tag=0x0103/  259 type= 3 len=    1 val=0x0006/6
+tag=0x011a/  282 type= 5 len=    1 val=0x2f234/193076
+tag=0x011b/  283 type= 5 len=    1 val=0x2f23c/193084
+tag=0x0128/  296 type= 3 len=    1 val=0x0002/2
+tag=0x0201/  513 type= 4 len=    1 val=0x2f340/193344
+tag=0x0202/  514 type= 4 len=    1 val=0x162d41/1453377
+tag=0x0213/  531 type= 3 len=    1 val=0x0002/2
+End of subifd 0
+
+Start of subifd 1 (offset 0x2f244)
+nEntries=17
+tag=0x00fe/  254 type= 4 len=    1 val=0x0000/0
+tag=0x0100/  256 type= 4 len=    1 val=0x10e0/4320
+tag=0x0101/  257 type= 4 len=    1 val=0x0b34/2868
+tag=0x0102/  258 type= 3 len=    1 val=0x000c/12
+tag=0x0103/  259 type= 3 len=    1 val=0x8799/34713
+tag=0x0106/  262 type= 3 len=    1 val=0x8023/32803
+tag=0x0111/  273 type= 4 len=    1 val=0x192084/1646724
+tag=0x0115/  277 type= 3 len=    1 val=0x0001/1
+tag=0x0116/  278 type= 4 len=    1 val=0x0b34/2868
+tag=0x0117/  279 type= 4 len=    1 val=0x886bbc/8940476
+tag=0x011a/  282 type= 5 len=    1 val=0x2f318/193304
+tag=0x011b/  283 type= 5 len=    1 val=0x2f320/193312
+tag=0x011c/  284 type= 3 len=    1 val=0x0001/1
+tag=0x0128/  296 type= 3 len=    1 val=0x0002/2
+tag=0x828d/33421 type= 3 len=    2 offset=0x20002/131074, [1dd2/7634 4704/18180 ]
+tag=0x828e/33422 type= 1 len=    4 val=0x0001/0 1 1 2
+tag=0x9217/37399 type= 3 len=    1 val=0x0002/2
+End of subifd 1
+
+tag=0x0214/  532 type= 5 len=    6 val=0x019c/412
+tag=0x8769/34665 type= 4 len=    1 val=0x01e0/480
+
+  EXIF nEntries=32
+tag=0x829a/33434 type= 5 len=    1 val=0x0368/872
+tag=0x829d/33437 type= 5 len=    1 val=0x0370/880
+tag=0x8822/34850 type= 3 len=    1 val=0x0001/1
+tag=0x8827/34855 type= 3 len=    1 val=0x0064/100
+tag=0x9003/36867 "2007:10:14 14:34:06."
+tag=0x9004/36868 "2007:10:14 14:34:06."
+tag=0x9204/37380 type=10 len=    1 val=0x03a0/928
+tag=0x9205/37381 type= 5 len=    1 val=0x03a8/936
+tag=0x9207/37383 type= 3 len=    1 val=0x0005/5
+tag=0x9208/37384 type= 3 len=    1 val=0x0000/0
+tag=0x9209/37385 type= 3 len=    1 val=0x0000/0
+tag=0x920a/37386 type= 5 len=    1 val=0x03b0/944
+tag=0x927c/37500 bytes, len=134342, offset=0x3f4/1012, val = [ 4e696b6f6e00021000004d4d002a0000...]
+
+  Makernote nEntries=54
+tag=0x0001/    1 bytes sequence, len=4, val=0x30323130
+tag=0x0002/    2 type= 3 len=    2 offset=0x0064/100, [d/13 0/0 ]
+tag=0x0003/    3 "COLOR."
+tag=0x0004/    4 "RAW    ."
+tag=0x0005/    5 "AUTO        ."
+tag=0x0006/    6 "HIGH  ."
+tag=0x0007/    7 "MANUAL."
+tag=0x0008/    8 "NORMAL      ."
+tag=0x0009/    9 "                   ."
+tag=0x000b/   11 type= 8 len=    1 val=0x0000/0
+tag=0x000c/   12 type= 5 len=    4 val=0x02ea/746
+tag=0x000d/   13 bytes sequence, len=4, val=0x10600
+tag=0x000e/   14 bytes sequence, len=4, val=0xf5010c00
+tag=0x0011/   17 type= 4 len=    1 val=0x1e92/7826
+
+ tag 0x11
+nEntries=7
+tag=0x0103/  259 type= 3 len=    1 val=0x0006/6
+tag=0x011a/  282 type= 5 len=    1 val=0x1eee/7918
+tag=0x011b/  283 type= 5 len=    1 val=0x1ef6/7926
+tag=0x0128/  296 type= 3 len=    1 val=0x0002/2
+tag=0x0201/  513 type= 4 len=    1 val=0x1efe/7934
+tag=0x0202/  514 type= 4 len=    1 val=0x1edbd/126397
+tag=0x0213/  531 type= 3 len=    1 val=0x0002/2
+
+tag=0x0013/   19 type= 3 len=    2 offset=0x0064/100, [d/13 0/0 ]
+tag=0x0017/   23 bytes sequence, len=4, val=0x10600
+tag=0x0018/   24 bytes sequence, len=4, val=0x10600
+tag=0x0019/   25 type=10 len=    1 val=0x030a/778
+tag=0x001b/   27 type= 3 len=    7 offset=0x0312/786, [0/0 10e0/4320 b34/2868 10e0/4320 b34/2868 0/0 0/0 ]
+tag=0x001c/   28 bytes sequence, len=3, val=0x10600
+tag=0x001d/   29 "5067079."
+tag=0x001e/   30 type= 3 len=    1 val=0x0001/1
+tag=0x001f/   31 bytes, len=8, offset=0x32a/810, val = [ 3031303002000000]
+tag=0x0020/   32 type= 1 len=    1 val=0x0000/0 0 0 0
+tag=0x0081/  129 "NORMAL  ."
+tag=0x0083/  131 type= 1 len=    1 val=0x0200/2 0 0 0
+tag=0x0084/  132 type= 5 len=    4 val=0x033e/830
+tag=0x0087/  135 type= 1 len=    1 val=0x0000/0 0 0 0
+tag=0x0088/  136 bytes sequence, len=4, val=0x0000
+tag=0x0089/  137 type= 3 len=    1 val=0x0000/0
+tag=0x008a/  138 type= 3 len=    1 val=0x0002/2
+tag=0x008b/  139 bytes sequence, len=4, val=0x54010c00
+tag=0x008c/  140 bytes, len=4160, offset=0x35e/862, val = [ 491000ff00ff01000500001e243e4cdd...]
+tag=0x008d/  141 "MODE3   ."
+tag=0x0090/  144 "NATURAL    ."
+tag=0x0091/  145 bytes, len=630, offset=0x13b6/5046, val = [ 30323034411c79f792d2a1a70ec1e497...]
+tag=0x0092/  146 type= 8 len=    1 val=0x0000/0
+tag=0x0093/  147 type= 3 len=    1 val=0x0001/1
+tag=0x0095/  149 "OFF ."
+tag=0x0096/  150 bytes, len=1412, offset=0x1636/5686, val = [ 4410014801480148014802ab00000001...]
+tag=0x0097/  151 bytes, len=608, offset=0x1bba/7098, val = [ 30323034000000000000000000000000...]
+tag=0x0098/  152 bytes, len=31, offset=0x1e1a/7706, val = [ 30323031702644d6a4a3f0e45b885281...]
+tag=0x0099/  153 type= 3 len=    2 offset=0x870059a/141559194, [ffffffff/-1 ffffffff/-1 ]
+tag=0x009a/  154 type= 5 len=    2 val=0x1e3a/7738
+tag=0x009e/  158 type= 3 len=   10 offset=0x1e4a/7754, [0/0 0/0 0/0 0/0 0/0 0/0 0/0 0/0 0/0 0/0 ]
+tag=0x00a3/  163 type= 1 len=    1 val=0x0000/0 0 0 0
+tag=0x00a4/  164 bytes sequence, len=4, val=0x30323030
+tag=0x00a5/  165 type= 4 len=    1 val=0x21b5/8629
+tag=0x00a6/  166 type= 4 len=    1 val=0x025c/604
+tag=0x00a7/  167 type= 4 len=    1 val=0x2411/9233
+tag=0x00a8/  168 bytes, len=20, offset=0x1e5e/7774, val = [ 30313031000000000000000000000000...]
+tag=0x00aa/  170 "NORMAL         ."
+tag=0x00b0/  176 bytes, len=16, offset=0x1e82/7810, val = [ 30313030000000000000000000000000...]
+tag=0x00b1/  177 type= 3 len=    1 val=0x0000/0
+end of Makenotes
+tag=0x9286/37510 bytes, len=44, offset=0x3b8/952, val = [ 4153434949000000436f707972696768...]
+tag=0x9290/37520 ""
+tag=0x9291/37521 ""
+tag=0x9292/37522 ""
+tag=0xa217/41495 type= 3 len=    1 val=0x0002/2
+tag=0xa300/41728 bytes sequence, len=1, val=0x3000000
+tag=0xa301/41729 bytes sequence, len=1, val=0x1000000
+tag=0xa302/41730 bytes, len=8, offset=0x3e4/996, val = [ 0002000200010102]
+tag=0xa401/41985 type= 3 len=    1 val=0x0000/0
+tag=0xa402/41986 type= 3 len=    1 val=0x0001/1
+tag=0xa403/41987 type= 3 len=    1 val=0x0000/0
+tag=0xa404/41988 type= 5 len=    1 val=0x03ec/1004
+tag=0xa405/41989 type= 3 len=    1 val=0x004b/75
+tag=0xa406/41990 type= 3 len=    1 val=0x0000/0
+tag=0xa407/41991 type= 3 len=    1 val=0x0000/0
+tag=0xa408/41992 type= 3 len=    1 val=0x0000/0
+tag=0xa409/41993 type= 3 len=    1 val=0x0000/0
+tag=0xa40a/41994 type= 3 len=    1 val=0x0002/2
+tag=0xa40c/41996 type= 3 len=    1 val=0x0000/0
+end of Exif
+tag=0x8825/34853 type= 4 len=    1 val=0x2f1ba/192954
+tag=0x9003/36867 "2007:10:14 14:34:06."
+tag=0x9216/37398 type= 1 len=    4 val=0x0100/1 0 0 0
