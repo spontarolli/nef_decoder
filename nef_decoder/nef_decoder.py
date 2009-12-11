@@ -138,7 +138,7 @@ EXIF_TAGS = dict([(1,    'Firmware'),
                   (37385, 'Flash'),
                   (37386, 'Focal Length'),
                   
-                  (37500, 'Marker Note'),
+                  (37500, 'Maker Note'),
                   
                   (37510, 'User Comments'),        
                   (37520, 'Sub-Second Time'),
@@ -166,7 +166,7 @@ EXIF_TAGS = dict([(1,    'Firmware'),
                   (514,   'Thumbnail Data Length'),
                   (531,   'YCbCr Positioning'),
                  ])
-NIKON_TAGS = dict([(1,    'Marker Note Version'),
+NIKON_TAGS = dict([(1,    'Maker Note Version'),
                    (2,    'ISO'),
                    (4,    'Quality'),
                    (5,    'White Balance'),
@@ -177,7 +177,7 @@ NIKON_TAGS = dict([(1,    'Marker Note Version'),
                    (11,   'White Balance Fine Tune'),
                    (13,   'Program Shift'),
                    (14,   'Exposure Difference'),
-                   (17,   'Nikon Preview'),
+                   (17,   'Nikon Preview Offset'),
                    (18,   'Flash Exposure Comp'),
                    (19,   'ISO Setting'),
                    (23,   'EV Value?'),
@@ -212,23 +212,41 @@ NIKON_TAGS = dict([(1,    'Marker Note Version'),
                    (171,  'Vari Program'),
                   ])
 
+MAKER_NOTE_TAG_ID = 37500
+
+NIKON_TREE = (# 12-bit lossy
+              (0,1,5,1,1,1,1,1,1,2,0,0,0,0,0,0,5,4,3,6,2,7,1,0,8,9,11,10,12),
+              # 12-bit lossy after split
+              (0,1,5,1,1,1,1,1,1,2,0,0,0,0,0,0,0x39,0x5a,0x38,0x27,0x16,5,4,3,2,1,0,11,12,12),
+              # 12-bit lossless
+              (0,1,4,2,3,1,2,0,0,0,0,0,0,0,0,0,5,4,6,3,7,2,8,1,9,0,10,11,12),
+              # 14-bit lossy
+              (0,1,4,3,1,1,1,1,1,2,0,0,0,0,0,0,5,6,4,7,8,3,9,2,1,0,10,11,12,13,14),
+              # 14-bit lossy after split
+              (0,1,5,1,1,1,1,1,1,1,2,0,0,0,0,0,8,0x5c,0x4b,0x3a,0x29,7,6,5,4,3,2,1,0,13,14),
+              # 14-bit lossless
+              (0,1,4,2,2,3,1,2,0,0,0,0,0,0,0,0,7,6,8,5,9,4,10,3,11,12,2,0,1,13,14))
+
 # Type ID: (Data type format, size in bytes)
 # Type formats that start with '_' are custom.
 TYPES = {1:   ('B',         1),
          2:   ('_str',      1),                           # Simple string.
          3:   ('H',         2),
          4:   ('L',         4),
-         5:   ('_urational',8),                           # rational?
+         5:   ('_urational',8),                           # rational
          6:   ('b',         1),
          7:   ('B',         1),                           # undefined.
          8:   ('h',         2),
          9:   ('l',         4),
-         10:  ('_rational', 8),                           # signed rational?
+         10:  ('_rational', 8),                           # signed rational
          11:  ('f',         4),
          12:  ('d',         8)}
 
 DEF_TYPE =    ('B',    1)
 CHILD_IFD_TAGS = (330, 34665)
+
+VERBOSE_TAG_FMT = '0x%04x  %s  %s  %02d  %s'
+
 
 
 
@@ -248,7 +266,7 @@ def unpack(fmt, buffer, big_endian=True):
     
     if(not fmt or fmt == '_str'):
         return(str(buffer))
-    elif((fmt == '_urational' or fmt == '_rational') and len(buffer) % 4 == 0):
+    elif((fmt == '_urational' or fmt == '_rational') and len(buffer) % 8 == 0):
         if(fmt == '_urational'):
             fmt = prefix + 'L'
         else:
@@ -259,11 +277,11 @@ def unpack(fmt, buffer, big_endian=True):
         i_max = n - 4
         res = []
         while(i <= i_max):
-            a = float(''.join([str(x) for x in 
-                               struct.unpack(fmt, buffer[i-4:i])]))
-            b = float(''.join([str(x) for x in 
-                               struct.unpack(fmt, buffer[i:i+4])]))
-            res.append(a / b)
+            a = int(''.join([str(x) for x in 
+                             struct.unpack(fmt, buffer[i-4:i])]))
+            b = int(''.join([str(x) for x in 
+                             struct.unpack(fmt, buffer[i:i+4])]))
+            res.append('%d / %d' % (a, b))
             
             i += 8
         return(res)
@@ -279,6 +297,31 @@ def unpack(fmt, buffer, big_endian=True):
     raise(NotImplementedError('Unsupported format/data type'))
 
 
+def unpack_linearization_table(data):
+    """
+    The linearization table is stored inside the Nikon Marker Note and is >1000
+    bytes in length.
+    
+    The format is as follows: (start=data.tell())
+        1   byte    version0
+        1   byte    version1
+    (if version0==0x49 and version1==0x58: data.seek(2110, os.SEEK_CUR))
+        4   short   vpred[2, 2]
+        1   short   curve length (n)
+        n   short   curve values
+    (if version0==0x44 and version1==0x20: 
+        data.seek(start+562, os.SEEK_SET)
+        1   short   split value)
+        
+    """
+    v0 = unpack('b', data[0])
+    v1 = unpack('b', data[1])
+    print(v0, v1)
+    # print('v0/v1: 0x%02x/0x%02x' % (v0, v1))
+    
+    
+    print(len(data))
+    return(())
 
 
 def decode_file(file_name, verbose=False):
@@ -300,12 +343,31 @@ def decode_nef(data, verbose=False):
     Decode the input NEF raw bytes `nef_data` and return the decoded byte 
     stream.
     """
+    # Decode the metadata.
+    ifds = decode_nef_header(data, verbose)
+    
+    # Now decode the thumbnail.
+    
+    # Now decode the pixel data.
+    
+    return('Not quite there yet.\n')
+
+
+def decode_nef_header(data, verbose=False):
+    """
+    The NEF header is a TIFF header:
+    
+    2 bytes:    endianess. Usually "MM" (i.e. big-endian)
+    2 bytes:    TIFF magic number 0x002a
+    4 bytes:    TIFF offset
+    n bytes:    the rest (meaning M IFDs, pixel data etc.)
+    """
     # Make sure that the file is big-endian. If not, then we have a problem 
     # since NEFs are always supposed to be big-endian...
     if(data.read(2) != 'MM'):
         data.close()
         raise(Exception('File is little-endian. Are you sure it is a NEF?'))
-    if(verbose):
+    if(verbose == 2):
         print('The file is big-endian.')
     
     # Now get the version and the offset to the first directory. Version should
@@ -315,25 +377,67 @@ def decode_nef(data, verbose=False):
     if(version != 42):
         data.close()
         raise(Exception('File version != 42. Are you sure it is a NEF?'))
-    if(verbose):
+    if(verbose == 2):
         print('Version:                                         %d' % (version))
         print('Offet to first IFD:                              %d' % (offset))
     
     # Now decode each IFD (Image File Directory) iteratively.
-    ifds = decode_ifd(data, initial_offset=offset, verbose=verbose)
-    
-    # Now decode the thumbnail.
-    
-    # Now decode the pixel data.
-    
-    return('')
+    ifds = decode_ifd(data, 
+                      initial_offset=offset, 
+                      tags=EXIF_TAGS, 
+                      make_note_tag=EXIF_TAGS[MAKER_NOTE_TAG_ID],
+                      verbose=verbose)
+    return(ifds)
 
 
-def decode_ifd(data, 
-               initial_offset, 
-               exif_tags=EXIF_TAGS,
-               nikon_tags=NIKON_TAGS,
-               verbose=False):
+def decode_maker_note(data, initial_offset, tags=NIKON_TAGS, verbose=False):
+    """
+    The Nikon Maker Note has a format wich is somewhat similar to that of the
+    .NEF file itself:
+    
+    6 bytes:    "Nikon" string
+    2 bytes:    version (short)? Usually 0x0210
+    2 bytes:    unknown (short)? Usually 0x0000
+    2 bytes:    endianess. Usually "MM" (i.e. big-endian)
+    2 bytes:    TIFF magic number 0x002a
+    4 bytes:    TIFF offset
+    n bytes:    IFD
+    
+    So, apart from the first 10 bytes, the structure is identical to the .NEF 
+    file itself.
+    """
+    initial_offset += 10
+    data.seek(initial_offset)
+    
+    # Make sure that the file is big-endian. If not, then we have a problem 
+    # since NEFs are always supposed to be big-endian...
+    if(data.read(2) != 'MM'):
+        data.close()
+        raise(Exception('File is little-endian. Are you sure it is a NEF?'))
+    if(verbose == 2):
+        print('The file is big-endian.')
+    
+    # Now get the version and the offset to the first directory. Version should
+    # be 42.
+    version = unpack('H', data.read(2))[0]
+    offset = initial_offset + unpack('I', data.read(4))[0]
+    if(version != 42):
+        data.close()
+        raise(Exception('File version != 42. Are you sure it is a NEF?'))
+    if(verbose == 2):
+        print('Version:                                         %d' % (version))
+        print('Offet to Maker Note IFD:                         %d' % (offset))
+    
+    make_note_ifd = decode_ifd(data, 
+                               initial_offset=offset,
+                               tags=NIKON_TAGS,
+                               make_note_tag=None,
+                               verbose=verbose)
+    return(make_note_ifd)
+
+
+def decode_ifd(data, initial_offset, tags=EXIF_TAGS, 
+               make_note_tag=EXIF_TAGS[MAKER_NOTE_TAG_ID], verbose=False):
     # IFDs have the format:
     #   2 bytes     number of tags/entries in the IFD.
     #   12 bytes    for each IFD entry (times the number of tags).
@@ -358,18 +462,15 @@ def decode_ifd(data,
     #   10  signed rational
     #   11  float
     #   12  double
-    
-    # Seek to offset (relative to the beginning of the data). An offset of 0 
-    # means that we are done.
     dirs = []
     
-    # We usually have 3 child IFDs: EXIF, Preview, Raw.
+    # We usually have 4 child IFDs: EXIF, Preview, Raw and Maker Note.
     offsets = [initial_offset, ]
+    maker_note_offset = None
     
-    in_marker_note = False
     while(offsets):
         offset = offsets.pop()
-        if(verbose):
+        if(verbose == 2):
             print('Offset:                                      %d' %(offset))
         if(not offset):
             continue
@@ -378,25 +479,19 @@ def decode_ifd(data,
         dir = []
         data.seek(offset, os.SEEK_SET)
         
-        # Reset the Marker Note flag and decide which tags we are going to use.
-        tags = exif_tags
-        if(in_marker_note):
-            tags = nikon_tags
-            in_marker_note = False
-        
         # Parse the directory content.
         n = unpack('H', data.read(2))[0]
-        if(verbose):
+        if(verbose == 2):
             print('N:                                           %d' %(n))
 
         while(n):
-            if(verbose):
+            if(verbose == 2):
                 print('We are at %d' % (data.tell()))
             
             tag_id = unpack('H', data.read(2))[0]
             tag = tags.get(tag_id, 'Unknown Tag')
-            typ_fmt, typ_size = TYPES.get(unpack('H', data.read(2))[0], 
-                                          DEF_TYPE)
+            typ_id = unpack('H', data.read(2))[0]
+            typ_fmt, typ_size = TYPES.get(typ_id, DEF_TYPE)
             len = unpack('I', data.read(4))[0]
             
             unpack_fmt = typ_fmt
@@ -409,26 +504,29 @@ def decode_ifd(data,
                 new_offset = unpack('I', data.read(4))[0]
                 
                 # Special handling for the Marker Note.
-                if(tag == 'Marker Note'):
-                    offsets.append(new_offset + 18)
-                    in_marker_note = True
+                if(make_note_tag and tag == make_note_tag):
+                    maker_note_offset = new_offset
                     n -= 1
                     continue
                 
                 # Go there...
                 here = data.tell()
                 data.seek(new_offset, os.SEEK_SET)
-                if(verbose):
+                if(verbose == 2):
                     print('Jump to %d' % (new_offset))
                 
+                # Read the data to decode.
                 unpack_bytes = data.read(val_size)
                 
                 # ...and back.
                 data.seek(here, os.SEEK_SET)
-                if(verbose):
+                if(verbose == 2):
                     print('Jump back')
             else:
+                # Read the data to decode (4 bytes in this case).
                 unpack_bytes = data.read(4)
+                
+                # Do we need padding (only if the data size would be < 4 bytes)?
                 if(val_size < 4 and 
                    typ_fmt != None and 
                    not typ_fmt[0] == '_'):
@@ -436,6 +534,16 @@ def decode_ifd(data,
                     unpack_fmt += pad
             
             # Decode the tag value.
+            # Here we have a few special cases and only is inside a Nikon Marker
+            # Note: Linearization Table being one.
+#             if(tag == 'Linearization Table' and tags == nikon_tags):
+#                 val = unpack_linearization_table(unpack_bytes)
+#             else:
+#                 val = unpack(unpack_fmt, unpack_bytes)
+            
+            # Decode the tag value.
+            if(tag == 'Exposure Bracket Value'):
+                print(struct.unpack('>8B', unpack_bytes))
             val = unpack(unpack_fmt, unpack_bytes)
             
             # Did we get one of the child offsets?
@@ -448,12 +556,14 @@ def decode_ifd(data,
             # Decrement the number of entries.
             n -= 1
             if(verbose):
-                print('Tag:                                     %s' %(tag))
-                print('Tag ID (dec):                            %d' %(tag_id))
-                print('Tag ID (hex):                            0x%04x' %(tag_id))
-                print('Type:                                    %s' %(typ_fmt))
-                print('Length:                                  %d' %(len))
-                print('Value:                                   %s' %(str(val)[:20]))
+                print(VERBOSE_TAG_FMT % (tag_id, tag, typ_fmt, len, val))
+#                 print('Tag:                                     %s' %(tag))
+#                 print('Tag ID (dec):                            %d' %(tag_id))
+#                 print('Tag ID (hex):                            0x%04x' %(tag_id))
+#                 print('Type ID:                                 %d' %(typ_id))
+#                 print('Type fmt:                                %s' %(typ_fmt))
+#                 print('Length:                                  %d' %(len))
+#                 print('Value:                                   %s' %(str(val)[:20]))
         
         # Add the current directory to the list of directories.
         dirs.append(dir)
@@ -462,6 +572,10 @@ def decode_ifd(data,
         new_offset = unpack('I', data.read(4))[0]
         if(new_offset != 0):
             offsets.append(new_offset)
+    
+    # Now parse the Maker Note, if any.
+    if(maker_note_offset != None):
+        dir.append(decode_maker_note(data, maker_note_offset, verbose=verbose))
     return(dirs)
     
     
