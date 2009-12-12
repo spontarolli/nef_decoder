@@ -138,7 +138,7 @@ EXIF_TAGS = dict([(1,    'Firmware'),
                   (37385, 'Flash'),
                   (37386, 'Focal Length'),
                   
-                  (37500, 'Maker Note'),
+                  (37500, 'Makernote'),
                   
                   (37510, 'User Comments'),        
                   (37520, 'Sub-Second Time'),
@@ -166,7 +166,7 @@ EXIF_TAGS = dict([(1,    'Firmware'),
                   (514,   'Thumbnail Data Length'),
                   (531,   'YCbCr Positioning'),
                  ])
-NIKON_TAGS = dict([(1,    'Maker Note Version'),
+NIKON_TAGS = dict([(1,    'Makernote Version'),
                    (2,    'ISO'),
                    (4,    'Quality'),
                    (5,    'White Balance'),
@@ -212,7 +212,7 @@ NIKON_TAGS = dict([(1,    'Maker Note Version'),
                    (171,  'Vari Program'),
                   ])
 
-MAKER_NOTE_TAG_ID = 37500
+MAKERNOTE_TAG_ID = 37500
 
 NIKON_TREE = (# 12-bit lossy
               (0,1,5,1,1,1,1,1,1,2,0,0,0,0,0,0,5,4,3,6,2,7,1,0,8,9,11,10,12),
@@ -385,14 +385,14 @@ def decode_nef_header(data, verbose=False):
     ifds = decode_ifd(data, 
                       initial_offset=offset, 
                       tags=EXIF_TAGS, 
-                      make_note_tag=EXIF_TAGS[MAKER_NOTE_TAG_ID],
+                      make_note_tag=EXIF_TAGS[MAKERNOTE_TAG_ID],
                       verbose=verbose)
     return(ifds)
 
 
-def decode_maker_note(data, initial_offset, tags=NIKON_TAGS, verbose=False):
+def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     """
-    The Nikon Maker Note has a format wich is somewhat similar to that of the
+    The Nikon Makernote has a format wich is somewhat similar to that of the
     .NEF file itself:
     
     6 bytes:    "Nikon" string
@@ -404,10 +404,12 @@ def decode_maker_note(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     n bytes:    IFD
     
     So, apart from the first 10 bytes, the structure is identical to the .NEF 
-    file itself.
+    file itself. This also means that the offsets specified as tag value (when
+    the type_length * tag_length > 4 bytes) are *relative* to the beginning of
+    this 'fake' TIFF (i.e. initial_offset + 10).
     """
-    initial_offset += 10
-    data.seek(initial_offset)
+    base_offset = initial_offset + 10
+    data.seek(base_offset)
     
     # Make sure that the file is big-endian. If not, then we have a problem 
     # since NEFs are always supposed to be big-endian...
@@ -420,24 +422,30 @@ def decode_maker_note(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     # Now get the version and the offset to the first directory. Version should
     # be 42.
     version = unpack('H', data.read(2))[0]
-    offset = initial_offset + unpack('I', data.read(4))[0]
+    offset = unpack('I', data.read(4))[0]  # needs to be relative to base_offset
+                                           # but decode_ifd will do that.
     if(version != 42):
         data.close()
         raise(Exception('File version != 42. Are you sure it is a NEF?'))
     if(verbose == 2):
         print('Version:                                         %d' % (version))
-        print('Offet to Maker Note IFD:                         %d' % (offset))
+        print('Offet to Makernote IFD:                          %d' % (offset))
     
     make_note_ifd = decode_ifd(data, 
                                initial_offset=offset,
                                tags=NIKON_TAGS,
                                make_note_tag=None,
+                               base_offset = base_offset,
                                verbose=verbose)
     return(make_note_ifd)
 
 
-def decode_ifd(data, initial_offset, tags=EXIF_TAGS, 
-               make_note_tag=EXIF_TAGS[MAKER_NOTE_TAG_ID], verbose=False):
+def decode_ifd(data, 
+               initial_offset, 
+               tags=EXIF_TAGS, 
+               make_note_tag=EXIF_TAGS[MAKERNOTE_TAG_ID], 
+               base_offset=0,           # It is != 0 only for Nikon Makernote.
+               verbose=False):
     # IFDs have the format:
     #   2 bytes     number of tags/entries in the IFD.
     #   12 bytes    for each IFD entry (times the number of tags).
@@ -464,20 +472,25 @@ def decode_ifd(data, initial_offset, tags=EXIF_TAGS,
     #   12  double
     dirs = []
     
-    # We usually have 4 child IFDs: EXIF, Preview, Raw and Maker Note.
-    offsets = [initial_offset, ]
-    maker_note_offset = None
+    # We usually have 4 child IFDs: EXIF, Preview, Raw and Makernote.
+    relative_offsets = [initial_offset, ]
+    makernote_abs_offset = None
     
-    while(offsets):
-        offset = offsets.pop()
+    # From here below all offsets are relative to base_offset. Of course 
+    # base_offset is 0 for all IFDs *but* the Nikon Makernote.
+    while(relative_offsets):
+        relative_offset = relative_offsets.pop()
+        abs_offset = relative_offset + base_offset
+        
         if(verbose == 2):
-            print('Offset:                                      %d' %(offset))
-        if(not offset):
+            print('Abs Offset:                                  %d' \
+                  %(base_offset + relative_offset))
+        if(not relative_offset):
             continue
         
         # Start parsing a new IFD.
         dir = []
-        data.seek(offset, os.SEEK_SET)
+        data.seek(abs_offset, os.SEEK_SET)
         
         # Parse the directory content.
         n = unpack('H', data.read(2))[0]
@@ -501,19 +514,20 @@ def decode_ifd(data, initial_offset, tags=EXIF_TAGS,
             unpack_bytes = []
             val_size = typ_size * len
             if(val_size > 4):
-                new_offset = unpack('I', data.read(4))[0]
+                new_relative_offset = unpack('I', data.read(4))[0]
+                new_abs_offset = new_relative_offset + base_offset
                 
                 # Special handling for the Marker Note.
                 if(make_note_tag and tag == make_note_tag):
-                    maker_note_offset = new_offset
+                    makernote_abs_offset = new_abs_offset
                     n -= 1
                     continue
                 
                 # Go there...
                 here = data.tell()
-                data.seek(new_offset, os.SEEK_SET)
+                data.seek(new_abs_offset, os.SEEK_SET)
                 if(verbose == 2):
-                    print('Jump to %d' % (new_offset))
+                    print('Jump to %d' % (new_abs_offset))
                 
                 # Read the data to decode.
                 unpack_bytes = data.read(val_size)
@@ -542,13 +556,11 @@ def decode_ifd(data, initial_offset, tags=EXIF_TAGS,
 #                 val = unpack(unpack_fmt, unpack_bytes)
             
             # Decode the tag value.
-            if(tag == 'Exposure Bracket Value'):
-                print(struct.unpack('>8B', unpack_bytes))
             val = unpack(unpack_fmt, unpack_bytes)
             
             # Did we get one of the child offsets?
             if(tag_id in CHILD_IFD_TAGS):
-                offsets += val
+                relative_offsets += val
             
             # Add the tag to the current directory.
             dir.append((tag, tag_id, typ_fmt, len, val))
@@ -569,13 +581,15 @@ def decode_ifd(data, initial_offset, tags=EXIF_TAGS,
         dirs.append(dir)
         
         # Get a new offset and start over.
-        new_offset = unpack('I', data.read(4))[0]
-        if(new_offset != 0):
-            offsets.append(new_offset)
+        new_relative_offset = unpack('I', data.read(4))[0]
+        if(new_relative_offset != 0):
+            relative_offsets.append(new_offset)
     
-    # Now parse the Maker Note, if any.
-    if(maker_note_offset != None):
-        dir.append(decode_maker_note(data, maker_note_offset, verbose=verbose))
+    # Now parse the Makernote, if any.
+    if(makernote_abs_offset != None):
+        dir.append(decode_makernote(data, 
+                                    makernote_abs_offset, 
+                                    verbose=verbose))
     return(dirs)
     
     
