@@ -24,6 +24,8 @@ import cStringIO
 import os
 import struct
 
+from huffman_tables import huf as NIKON_TREE
+
 # File format resources:
 # Nikon tags: http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/Nikon.html
 # EXIF tags: http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/EXIF.html
@@ -219,18 +221,6 @@ NEF_BPS_TAG_ID = 258
 NEF_WIDTH_TAG_ID = 256
 NEF_HEIGHT_TAG_ID = 257
 
-NIKON_TREE = (# 12-bit lossy
-              (0,1,5,1,1,1,1,1,1,2,0,0,0,0,0,0,5,4,3,6,2,7,1,0,8,9,11,10,12),
-              # 12-bit lossy after split
-              (0,1,5,1,1,1,1,1,1,2,0,0,0,0,0,0,0x39,0x5a,0x38,0x27,0x16,5,4,3,2,1,0,11,12,12),
-              # 12-bit lossless
-              (0,1,4,2,3,1,2,0,0,0,0,0,0,0,0,0,5,4,6,3,7,2,8,1,9,0,10,11,12),
-              # 14-bit lossy
-              (0,1,4,3,1,1,1,1,1,2,0,0,0,0,0,0,5,6,4,7,8,3,9,2,1,0,10,11,12,13,14),
-              # 14-bit lossy after split
-              (0,1,5,1,1,1,1,1,1,1,2,0,0,0,0,0,8,0x5c,0x4b,0x3a,0x29,7,6,5,4,3,2,1,0,13,14),
-              # 14-bit lossless
-              (0,1,4,2,2,3,1,2,0,0,0,0,0,0,0,0,7,6,8,5,9,4,10,3,11,12,2,0,1,13,14))
 
 # Type ID: (Data type format, size in bytes)
 # Type formats that start with '_' are custom.
