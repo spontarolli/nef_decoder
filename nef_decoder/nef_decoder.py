@@ -213,6 +213,11 @@ NIKON_TAGS = dict([(1,    'Makernote Version'),
                   ])
 
 MAKERNOTE_TAG_ID = 37500
+NIKON_LINCURVE_TAG_ID = 150
+NEF_COMPRESSION_TAG_ID = 147
+NEF_BPS_TAG_ID = 258
+NEF_WIDTH_TAG_ID = 256
+NEF_HEIGHT_TAG_ID = 257
 
 NIKON_TREE = (# 12-bit lossy
               (0,1,5,1,1,1,1,1,1,2,0,0,0,0,0,0,5,4,3,6,2,7,1,0,8,9,11,10,12),
@@ -297,12 +302,14 @@ def unpack(fmt, buffer, big_endian=True):
     raise(NotImplementedError('Unsupported format/data type'))
 
 
-def unpack_linearization_table(data):
+def unpack_linearization_table(data, tag_id, typ_fmt, len, val, compression,
+                               image_bps, initial_offset, base_offset, 
+                               verbose=False):
     """
     The linearization table is stored inside the Nikon Marker Note and is >1000
     bytes in length.
     
-    The format is as follows: (start=data.tell())
+    The format is as follows: (start=initial_offset+base_offset)
         1   byte    version0
         1   byte    version1
     (if version0==0x49 and version1==0x58: data.seek(2110, os.SEEK_CUR))
@@ -314,14 +321,71 @@ def unpack_linearization_table(data):
         1   short   split value)
         
     """
-    v0 = unpack('b', data[0])
-    v1 = unpack('b', data[1])
-    print(v0, v1)
-    # print('v0/v1: 0x%02x/0x%02x' % (v0, v1))
+    # Remember that val is already a list of len elements of type typ_fmt.
+    # Make the offset absolute and go there.
+    abs_offset = initial_offset + base_offset
+    data.seek(abs_offset, os.SEEK_SET)
+    
+    # See is we have to do any reading from data.
+    if(typ_fmt == 'B'):
+        v0, v1 = val[:2]
+        data.seek(2, os.SEEK_CUR)       # keep track of where we are in data.
+    else:
+        v0, v1 = unpack('BB', data.read(2))
+    
+    # Choose the appropriate NIKON Huffman tree.
+    tree_index = 0
+    if(v0 == 0x46):
+        tree_index = 2
+    if(image_bps == 14):
+        tree_index += 3
     
     
-    print(len(data))
-    return(())
+    # For some combination of v0 and v1 we need to seek ahead a fixed ammount.
+    if(v0 == 0x49 or v1 == 0x58):
+        data.seek(abs_offset + 2 + 2110, os.SEEK_SET)
+    
+    # Read the vertical predictor 2x2 matrix.
+    # TODO: simple optimization: use the bytes in val rather than reading data.
+    vert_preds = unpack('HHHH', data.read(8))
+    num_points = unpack('H', data.read(2))[0]
+    values = unpack('H'*num_points, data.read(num_points * 2))
+    
+    # Decode the curve.
+    curve = None
+    split_row = None
+    if(v0 == 0x44 and v1 == 0x20 and step > 0):
+        curve_max_len = 2 ** image_bps
+        
+        # The curve has length `curve_max_len` but we only have a `num_points`
+        # points, so we need to interpolate.
+        step = int(float(curve_max_len) / float(curve_size - 1))
+        curve = [0, ] * curve_max_len
+        for i in range(num_points):
+            curve[i*step] = values[i]
+        
+        # Now interpolate between those values.
+        step = float(step)
+        for i in range(curve_max_len):
+            curve[i] = int(float(curve[i-i%step] * (step-i%step) +
+                                 curve[i-i%step+step] * (i%step)) / step)
+        
+        # Finally, get the 'split value'. This is the row where we need to
+        # re-init the Huffman tree.
+        data.seek(abs_offset + 562, os.SEEK_SET)
+        split_row = unpack('H', data.read(2))
+    elif(v0 != 0x46 and num_points <= 16385):
+        # Simple case: curve = values. Also, no split row here.
+        curve = values
+    else:
+        raise(Exception('Unsupported Nikon linearization curve.'))
+    
+    # Sometimes curve elements are repeated at the end. Get the number of 
+    # distinct elements.
+    while(curve[num_points-2] == curve[num_points-1]):
+        num_points -= 1
+    
+    return(curve)
 
 
 def decode_file(file_name, verbose=False):
@@ -385,12 +449,13 @@ def decode_nef_header(data, verbose=False):
     ifds = decode_ifd(data, 
                       initial_offset=offset, 
                       tags=EXIF_TAGS, 
-                      make_note_tag=EXIF_TAGS[MAKERNOTE_TAG_ID],
+                      makernote_tag=EXIF_TAGS[MAKERNOTE_TAG_ID],
                       verbose=verbose)
     return(ifds)
 
 
-def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
+def decode_makernote(data, initial_offset, tags=NIKON_TAGS, image_bps=12,
+                     verbose=False):
     """
     The Nikon Makernote has a format wich is somewhat similar to that of the
     .NEF file itself:
@@ -431,19 +496,49 @@ def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
         print('Version:                                         %d' % (version))
         print('Offet to Makernote IFD:                          %d' % (offset))
     
-    make_note_ifd = decode_ifd(data, 
-                               initial_offset=offset,
-                               tags=NIKON_TAGS,
-                               make_note_tag=None,
-                               base_offset = base_offset,
-                               verbose=verbose)
-    return(make_note_ifd)
+    [makernote_ifd, ] = decode_ifd(data, 
+                                   initial_offset=offset,
+                                   tags=NIKON_TAGS,
+                                   makernote_tag=None,
+                                   base_offset=base_offset,
+                                   verbose=verbose)
+    
+    # Fetch the data compression value.
+    try:
+        compr_flag = makernote_ifd[NEF_COMPRESSION_TAG_ID][4]
+    except:
+        raise(Exception('This Nikon Makernote doe not have a compression flag'))
+    
+    # Now decode the linearization curve (NIKON_LINCURVE_TAG_ID).
+    # Each IFD is a dictionary of the form:
+    #  {tag_id: [val_abs_offset, tag, typ_fmt, len, val]}
+    # Where abs_offset is the absolute file offset of the corresponding IFD 
+    # entry.
+    # Update the entry value.
+    entry = makernote_ifd.get(NIKON_LINCURVE_TAG_ID, None)
+    if(not entry):
+        raise(Exception('This Nikon Makernote does not have a lin curve!'))
+    
+    
+    rel_offset = entry[0] - base_offset     # make the offset relative.
+    entry[4] = unpack_linearization_table(data,
+                                          tag_id=NIKON_LINCURVE_TAG_ID,
+                                          typ_fmt=entry[2],
+                                          len=entry[3],
+                                          val=entry[4],
+                                          compression=compr_flag,
+                                          image_bps=image_bps,
+                                          initial_offset=rel_offset,
+                                          base_offset=base_offset,
+                                          verbose=verbose)
+    
+    return(makernote_ifd)
 
 
 def decode_ifd(data, 
                initial_offset, 
                tags=EXIF_TAGS, 
-               make_note_tag=EXIF_TAGS[MAKERNOTE_TAG_ID], 
+               makernote_tag=EXIF_TAGS[MAKERNOTE_TAG_ID], 
                base_offset=0,           # It is != 0 only for Nikon Makernote.
                verbose=False):
     # IFDs have the format:
@@ -489,7 +584,7 @@ def decode_ifd(data,
             continue
         
         # Start parsing a new IFD.
-        dir = []
+        dir = {}
         data.seek(abs_offset, os.SEEK_SET)
         
         # Parse the directory content.
@@ -506,6 +601,7 @@ def decode_ifd(data,
             typ_id = unpack('H', data.read(2))[0]
             typ_fmt, typ_size = TYPES.get(typ_id, DEF_TYPE)
             len = unpack('I', data.read(4))[0]
+            val_abs_offset = data.tell()
             
             unpack_fmt = typ_fmt
             if(typ_fmt != None and not typ_fmt[0] == '_'):
@@ -516,9 +612,10 @@ def decode_ifd(data,
             if(val_size > 4):
                 new_relative_offset = unpack('I', data.read(4))[0]
                 new_abs_offset = new_relative_offset + base_offset
+                val_abs_offset = new_abs_offset
                 
                 # Special handling for the Marker Note.
-                if(make_note_tag and tag == make_note_tag):
+                if(makernote_tag and tag == makernote_tag):
                     makernote_abs_offset = new_abs_offset
                     n -= 1
                     continue
@@ -547,35 +644,25 @@ def decode_ifd(data,
                     pad = 'x' * (4 - val_size)
                     unpack_fmt += pad
             
-            # Decode the tag value.
-            # Here we have a few special cases and only is inside a Nikon Marker
-            # Note: Linearization Table being one.
-#             if(tag == 'Linearization Table' and tags == nikon_tags):
-#                 val = unpack_linearization_table(unpack_bytes)
-#             else:
-#                 val = unpack(unpack_fmt, unpack_bytes)
-            
-            # Decode the tag value.
+            # Decode the tag value. This is always a tuple/list.
             val = unpack(unpack_fmt, unpack_bytes)
             
             # Did we get one of the child offsets?
             if(tag_id in CHILD_IFD_TAGS):
                 relative_offsets += val
             
+            # Make sure that if len == 1, we only store the value, not a 
+            # singleton.
+            if(len == 1):
+                val = val[0]
+            
             # Add the tag to the current directory.
-            dir.append((tag, tag_id, typ_fmt, len, val))
+            dir[tag_id] = [val_abs_offset, tag, typ_fmt, len, val]
             
             # Decrement the number of entries.
             n -= 1
             if(verbose):
                 print(VERBOSE_TAG_FMT % (tag_id, tag, typ_fmt, len, val))
-#                 print('Tag:                                     %s' %(tag))
-#                 print('Tag ID (dec):                            %d' %(tag_id))
-#                 print('Tag ID (hex):                            0x%04x' %(tag_id))
-#                 print('Type ID:                                 %d' %(typ_id))
-#                 print('Type fmt:                                %s' %(typ_fmt))
-#                 print('Length:                                  %d' %(len))
-#                 print('Value:                                   %s' %(str(val)[:20]))
         
         # Add the current directory to the list of directories.
         dirs.append(dir)
@@ -585,11 +672,25 @@ def decode_ifd(data,
         if(new_relative_offset != 0):
             relative_offsets.append(new_offset)
     
-    # Now parse the Makernote, if any.
+    
+    # FIXME: I do not think what follows is quite good style.
+    # Now parse the Makernote, if any. But before that get the image BPS out
+    # of the other IFDs,
     if(makernote_abs_offset != None):
-        dir.append(decode_makernote(data, 
-                                    makernote_abs_offset, 
-                                    verbose=verbose))
+        bps = None
+        for ifd in dirs:
+            if(not ifd.has_key(NEF_BPS_TAG_ID)):
+                continue
+            
+            if(ifd[NEF_WIDTH_TAG_ID] > 1000):       # Not a preview.
+                bps = ifd[NEF_BPS_TAG_ID][-1]
+        if(bps == None):
+            raise(Exception('Unable to find image bits per sample value.'))
+        
+        dirs.append(decode_makernote(data, 
+                                     initial_offset=makernote_abs_offset, 
+                                     image_bps=bps,
+                                     verbose=verbose))
     return(dirs)
     
     
