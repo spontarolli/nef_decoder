@@ -24,7 +24,7 @@ import cStringIO
 import os
 import struct
 
-from huffman_tables import huf as NIKON_TREE
+from huffman_tables import huff as NIKON_TREE
 
 # File format resources:
 # Nikon tags: http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/Nikon.html
