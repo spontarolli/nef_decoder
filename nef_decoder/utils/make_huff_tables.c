@@ -17,27 +17,27 @@ void make_decoder_ref (const unsigned char **source)
   const unsigned char *count;
   unsigned short *huff;
   unsigned short val=0;
+  unsigned char val1=0;
+  unsigned char val2=0;
 
   count = (*source += 16) - 17;
   for (max=16; max && !count[max]; max--);
-  huff = (unsigned short *) calloc (1 + (1 << max), sizeof *huff);
-  if(! huff) {
-    printf("Error creating the tree!\n");
-    return;
-  }
-  huff[0] = max;
-  
-  printf("huf = [%d,", max);
+  printf("[%d,", max);
   
   for (h=len=1; len <= max; len++)
     for (i=0; i < count[len]; i++, ++*source)
       for (j=0; j < 1 << (max-len); j++)
 	    if (h <= 1 << max) {
 	      val = len << 8 | **source;
-	      printf("%d,", val);
-	      huff[h++] = val;
+	      
+	      // val1 is the number of bits used. val2 is the value in the tree leaf
+	      val1 = val >> 8;
+	      val2 = (unsigned char)val;
+	      
+	      
+	      printf("(%d,%d),", val1, val2);
 	    }
-  printf("]\n");
+  printf("]");
   return;
 }
 
@@ -65,9 +65,18 @@ int main(void) {
   
   int tree_idx;
     
-    
+  printf("# \n");
+  printf("# Nikon NEF Huffman tables. Generated with make_huff_tables.c ");
+  printf("(which in turn is\n");
+  printf("# code from dcraw-c by Dave Coffin.\n");
+  printf("# \n");
+  
+  printf("huff = [\n");
   for(tree_idx=0; tree_idx<6; tree_idx++) {
+    printf("        ");
     make_decoder(tree[tree_idx]);
+    printf(",\n");
   }
+  printf("       ]\n");
   return 0;
 }
