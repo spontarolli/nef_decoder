@@ -24,6 +24,8 @@ import cStringIO
 import os
 import struct
 
+import bitarray
+
 from huffman_tables import huff as NIKON_TREE
 
 # File format resources:
@@ -216,10 +218,25 @@ NIKON_TAGS = dict([(1,    'Makernote Version'),
 
 MAKERNOTE_TAG_ID = 37500
 NIKON_LINCURVE_TAG_ID = 150
+
+IMAGE_TYPE_TAG_ID = 0x00fe
+IMAGE_WIDTH_TAG_ID = 256
+IMAGE_HEIGHT_TAG_ID = 257
+IMAGE_BPS_TAG_ID = 258
+IMAGE_COMPRESSION_TAG_ID = 0x0103
+IMAGE_ARRAY_TYPE_TAG_ID = 0x0106
+IMAGE_OFFSET_TAG_ID = 0x0111
+IMAGE_ORIENTATION_TAG_ID = 0x0112
+IMAGE_SPP_TAG_ID = 0x0115
+IMAGE_ROWS_PER_STRIP_TAG_ID = 0x0116
+IMAGE_BYTES_PER_STRIP_TAG_ID = 0x0117
+IMAGE_PLANAR_CONFIG_TAG_ID = 0x011c
+IMAGE_CFA_PATT_REPEAT_TAG_ID = 0x828d
+IMAGE_CFA_PATT_TAG_ID = 0x828e
+IMAGE_SENSING_TAG_ID = 0x9217
+
+RAW_IMAGE_TYPE = 0
 NEF_COMPRESSION_TAG_ID = 147
-NEF_BPS_TAG_ID = 258
-NEF_WIDTH_TAG_ID = 256
-NEF_HEIGHT_TAG_ID = 257
 
 
 # Type ID: (Data type format, size in bytes)
@@ -245,6 +262,81 @@ VERBOSE_TAG_FMT = '0x%04x  %s  %s  %02d  %s'
 
 
 
+
+
+def get_raw_image_info(ifds, 
+                       img_type_tag_id=IMAGE_TYPE_TAG_ID,
+                       img_width_tag_id=IMAGE_WIDTH_TAG_ID,
+                       img_height_tag_id=IMAGE_HEIGHT_TAG_ID,
+                       img_bps_tag_id=IMAGE_BPS_TAG_ID,
+                       img_compression_tag_id=IMAGE_COMPRESSION_TAG_ID,
+                       img_array_type_tag_id=IMAGE_ARRAY_TYPE_TAG_ID,
+                       img_offset_tag_id=IMAGE_OFFSET_TAG_ID,
+                       img_orientation_tag_id=IMAGE_ORIENTATION_TAG_ID,
+                       img_spp_tag_id=IMAGE_SPP_TAG_ID,
+                       img_rpstrip_tag_id=IMAGE_ROWS_PER_STRIP_TAG_ID,
+                       img_bpstrip_tag_id=IMAGE_BYTES_PER_STRIP_TAG_ID,
+                       img_planar_config_tag_id=IMAGE_PLANAR_CONFIG_TAG_ID,
+                       img_cfa_repeat_size_tag_id=IMAGE_CFA_PATT_REPEAT_TAG_ID,
+                       img_cfa_pattern_tag_id=IMAGE_CFA_PATT_TAG_ID,
+                       img_sensing_tag_id=IMAGE_SENSING_TAG_ID,
+                       raw_image_type=RAW_IMAGE_TYPE,
+                       verbose=False):
+    info = {}
+    for ifd in ifds:
+        img_type = ifd.get(img_type_tag_id, [None, ])[-1]
+        # TODO: Shall we just return the relevant IDF?
+        if(img_type == raw_image_type):
+            info['img_width'] = ifd[img_width_tag_id][-1]
+            info['img_height'] = ifd[img_height_tag_id][-1]
+            info['img_bps'] = ifd[img_bps_tag_id][-1]
+            info['img_compression'] = ifd[img_compression_tag_id][-1]
+            info['img_array_type'] = ifd[img_array_type_tag_id][-1]
+            info['img_offset'] = ifd[img_offset_tag_id][-1]
+            info['img_orientation'] = ifd[img_orientation_tag_id][-1]
+            info['img_spp'] = ifd[img_spp_tag_id][-1]
+            info['img_rpstrip'] = ifd[img_rpstrip_tag_id][-1]
+            info['img_bpstrip'] = ifd[img_bpstrip_tag_id][-1]
+            info['img_planar_config'] = ifd[img_planar_config_tag_id][-1]
+            info['img_cfa_repeat_size'] = ifd[img_cfa_repeat_size_tag_id][-1]
+            info['img_cfa_pattern'] = ifd[img_cfa_pattern_tag_id][-1]
+            info['img_sensing'] = ifd[img_sensing_tag_id][-1]
+    if(not info):
+        raise(Exception('Unable to find raw image info.'))
+    if(verbose == 2):
+        print(info)
+    return(info)
+
+
+
+
+def get_tag_value(ifds, tag_id, tag_name=None):
+    """
+    Given a list of IFDs, a IFD tag ID and optionally its corresponding tag name
+    (as an extra check), return the tag value. Raise an exception if the tag is
+    not found. This assumes that tag values CANNOT be None.
+    """
+    if(isinstance(ifds, dict)):
+        # We just have a single IFD! Create a temp list with just this element.
+        ifds = [ifds, ]
+    
+    # FIXME: use a random number/string instead of None.
+    val = None
+    for ifd in ifds:
+        # Each IFD is a dictionary of the form:
+        #  {tag_id: [val_abs_offset, tag, typ_fmt, len, val]}
+        if(not ifd.has_key(tag_id) or
+           (tag_name != None and ifd[tag_id][1] != tag_name)):
+            continue
+        
+        val = ifd[tag_id][-1]
+    if(val == None and tag_name == None):
+        raise(Exception('Tag ID %d not found.' % (tag_id)))
+    elif(val == None):
+        raise(Exception('Tag ID %d/Tag Name %s not found.' \
+                        % (tag_id, tag_name)))
+    # Else: just return the value.
+    return(val)
 
 
 def unpack(fmt, buffer, big_endian=True):
@@ -292,9 +384,8 @@ def unpack(fmt, buffer, big_endian=True):
     raise(NotImplementedError('Unsupported format/data type'))
 
 
-def unpack_linearization_table(data, tag_id, typ_fmt, len, val, compression,
-                               image_bps, initial_offset, base_offset, 
-                               verbose=False):
+def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
+                      verbose=False):
     """
     The linearization table is stored inside the Nikon Marker Note and is >1000
     bytes in length.
@@ -311,9 +402,26 @@ def unpack_linearization_table(data, tag_id, typ_fmt, len, val, compression,
         1   short   split value)
         
     """
+    # Remember that the Nikon Makernote is just like a small TIFF with 10 extra
+    # bytes (i.e. magic value and version). After that we have the usual 4 TIFF
+    # bytes (i.e. endianess and magic value). The two following bytes are the 
+    # offset to the Makernote IFD and that is the key number we want: all 
+    # offsets within the Makernote are *relative* to that one. We need this
+    # again because for some cameras we need to skip ~2000 bytes when decoding
+    # the linearization curve.
+    data.seek(makernote_abs_offset + 10 + 4)
+    base_offset = unpack('I', data.read(4))[0]
+    
+    # Get the NEF compression flag.
+    compression = makernote_ifd[NEF_COMPRESSION_TAG_ID][-1]
+    
+    # Get the image bits per sample (either 12 or 14 ususally).
+    image_bps = raw_info['img_bps']
+    
+    # Get the abs offset to the linearization curve.
+    [abs_offset, tag, typ_fmt, len, val] = makernote_ifd[NIKON_LINCURVE_TAG_ID]
+    
     # Remember that val is already a list of len elements of type typ_fmt.
-    # Make the offset absolute and go there.
-    abs_offset = initial_offset + base_offset
     data.seek(abs_offset, os.SEEK_SET)
     
     # See is we have to do any reading from data.
@@ -435,17 +543,37 @@ def decode_nef_header(data, verbose=False):
         print('Version:                                         %d' % (version))
         print('Offet to first IFD:                              %d' % (offset))
     
-    # Now decode each IFD (Image File Directory) iteratively.
+    # Now decode each IFD (Image File Directory) iteratively. 
     ifds = decode_ifd(data, 
                       initial_offset=offset, 
                       tags=EXIF_TAGS, 
                       makernote_tag=EXIF_TAGS[MAKERNOTE_TAG_ID],
                       verbose=verbose)
-    return(ifds)
+    
+    # Get the Makernote offset. If we do not have it, we are in trouble.
+    makernote_abs_offset = get_tag_value(ifds, 
+                                         tag_id=MAKERNOTE_TAG_ID, 
+                                         tag_name=EXIF_TAGS[MAKERNOTE_TAG_ID])
+    # Decode the Makernote.
+    makernote_ifd = decode_makernote(data, 
+                                     initial_offset=makernote_abs_offset, 
+                                     verbose=verbose)
+    
+    # Get the RAW image bits per sample value, size etc.
+    raw_info = get_raw_image_info(ifds, verbose=verbose)
+    
+    # Now decode the raw pixels.
+    # TODO: put this somewhere else.
+    raster = decode_pixel_data(data, 
+                               raw_info, 
+                               makernote_ifd, 
+                               makernote_abs_offset,
+                               verbose=verbose)
+    
+    return(ifds, makernote_ifd)
 
 
-def decode_makernote(data, initial_offset, tags=NIKON_TAGS, image_bps=12,
-                     verbose=False):
+def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     """
     The Nikon Makernote has a format wich is somewhat similar to that of the
     .NEF file itself:
@@ -492,36 +620,6 @@ def decode_makernote(data, initial_offset, tags=NIKON_TAGS, image_bps=12,
                                    makernote_tag=None,
                                    base_offset=base_offset,
                                    verbose=verbose)
-    
-    # Fetch the data compression value.
-    try:
-        compr_flag = makernote_ifd[NEF_COMPRESSION_TAG_ID][4]
-    except:
-        raise(Exception('This Nikon Makernote doe not have a compression flag'))
-    
-    # Now decode the linearization curve (NIKON_LINCURVE_TAG_ID).
-    # Each IFD is a dictionary of the form:
-    #  {tag_id: [val_abs_offset, tag, typ_fmt, len, val]}
-    # Where abs_offset is the absolute file offset of the corresponding IFD 
-    # entry.
-    # Update the entry value.
-    entry = makernote_ifd.get(NIKON_LINCURVE_TAG_ID, None)
-    if(not entry):
-        raise(Exception('This Nikon Makernote does not have a lin curve!'))
-    
-    
-    rel_offset = entry[0] - base_offset     # make the offset relative.
-    entry[4] = unpack_linearization_table(data,
-                                          tag_id=NIKON_LINCURVE_TAG_ID,
-                                          typ_fmt=entry[2],
-                                          len=entry[3],
-                                          val=entry[4],
-                                          compression=compr_flag,
-                                          image_bps=image_bps,
-                                          initial_offset=rel_offset,
-                                          base_offset=base_offset,
-                                          verbose=verbose)
-    
     return(makernote_ifd)
 
 
@@ -559,7 +657,6 @@ def decode_ifd(data,
     
     # We usually have 4 child IFDs: EXIF, Preview, Raw and Makernote.
     relative_offsets = [initial_offset, ]
-    makernote_abs_offset = None
     
     # From here below all offsets are relative to base_offset. Of course 
     # base_offset is 0 for all IFDs *but* the Nikon Makernote.
@@ -604,9 +701,12 @@ def decode_ifd(data,
                 new_abs_offset = new_relative_offset + base_offset
                 val_abs_offset = new_abs_offset
                 
-                # Special handling for the Marker Note.
+                # Special handling for the Marker Note: we do not store the 
+                # value, but rather just the offset as value.
                 if(makernote_tag and tag == makernote_tag):
-                    makernote_abs_offset = new_abs_offset
+                    dir[tag_id] = [new_abs_offset, tag, typ_fmt, len, 
+                                   new_abs_offset]
+                    # Decrement n and go to the next entry.
                     n -= 1
                     continue
                 
@@ -661,26 +761,6 @@ def decode_ifd(data,
         new_relative_offset = unpack('I', data.read(4))[0]
         if(new_relative_offset != 0):
             relative_offsets.append(new_offset)
-    
-    
-    # FIXME: I do not think what follows is quite good style.
-    # Now parse the Makernote, if any. But before that get the image BPS out
-    # of the other IFDs,
-    if(makernote_abs_offset != None):
-        bps = None
-        for ifd in dirs:
-            if(not ifd.has_key(NEF_BPS_TAG_ID)):
-                continue
-            
-            if(ifd[NEF_WIDTH_TAG_ID] > 1000):       # Not a preview.
-                bps = ifd[NEF_BPS_TAG_ID][-1]
-        if(bps == None):
-            raise(Exception('Unable to find image bits per sample value.'))
-        
-        dirs.append(decode_makernote(data, 
-                                     initial_offset=makernote_abs_offset, 
-                                     image_bps=bps,
-                                     verbose=verbose))
     return(dirs)
     
     
