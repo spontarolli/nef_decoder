@@ -263,6 +263,28 @@ VERBOSE_TAG_FMT = '0x%04x  %s  %s  %02d  %s'
 
 
 
+class BitReader(object):
+    def __init__(self, data_str):
+        bit_array = bitarray.bitarray()
+        bit_array.fromstring(data_str)
+        self.bit_buffer = bit_array.to01()
+        
+        # self.bit_buffer = bitarray.bitarray()
+        # self.bit_buffer.fromstring(data_str)
+        
+        self.pos = 0
+        self._int_fn = int
+        return
+    
+    def read(self, nbits, update_position=True):
+        # value = binutils.bin2dec(self.bit_buffer[self.pos:self.pos+nbits].to01())
+        # value = int(self.bit_buffer[self.pos:self.pos+nbits].to01(), 2)
+        value = int(self.bit_buffer[self.pos:self.pos+nbits], 2)
+        if(update_position):
+            self.pos += nbits
+        return(value)
+
+
 
 def get_raw_image_info(ifds, 
                        img_type_tag_id=IMAGE_TYPE_TAG_ID,
@@ -394,7 +416,7 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
         1   byte    version0
         1   byte    version1
     (if version0==0x49 and version1==0x58: data.seek(2110, os.SEEK_CUR))
-        4   short   vpred[2, 2]
+        4   short   vert_preds[2 x 2]
         1   short   curve length (n)
         n   short   curve values
     (if version0==0x44 and version1==0x20: 
@@ -402,16 +424,6 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
         1   short   split value)
         
     """
-    # Remember that the Nikon Makernote is just like a small TIFF with 10 extra
-    # bytes (i.e. magic value and version). After that we have the usual 4 TIFF
-    # bytes (i.e. endianess and magic value). The two following bytes are the 
-    # offset to the Makernote IFD and that is the key number we want: all 
-    # offsets within the Makernote are *relative* to that one. We need this
-    # again because for some cameras we need to skip ~2000 bytes when decoding
-    # the linearization curve.
-    data.seek(makernote_abs_offset + 10 + 4)
-    base_offset = unpack('I', data.read(4))[0]
-    
     # Get the NEF compression flag.
     compression = makernote_ifd[NEF_COMPRESSION_TAG_ID][-1]
     
@@ -437,7 +449,7 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
         tree_index = 2
     if(image_bps == 14):
         tree_index += 3
-    
+    tree = NIKON_TREE[tree_index]
     
     # For some combination of v0 and v1 we need to seek ahead a fixed ammount.
     if(v0 == 0x49 or v1 == 0x58):
@@ -445,7 +457,12 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     
     # Read the vertical predictor 2x2 matrix.
     # TODO: simple optimization: use the bytes in val rather than reading data.
-    vert_preds = unpack('HHHH', data.read(8))
+    horiz_preds = [0, 0]
+    vert_preds = [[0, 0], [0, 0]]
+    (vert_preds[0][0],
+     vert_preds[0][1],
+     vert_preds[1][0],
+     vert_preds[1][1]) = unpack('HHHH', data.read(8))
     num_points = unpack('H', data.read(2))[0]
     values = unpack('H'*num_points, data.read(num_points * 2))
     
@@ -453,7 +470,7 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     curve = None
     split_row = None
     if(v0 == 0x44 and v1 == 0x20 and step > 0):
-        curve_max_len = 2 ** image_bps
+        curve_max_len = 1 << tiff_bps & 0x7fff
         
         # The curve has length `curve_max_len` but we only have a `num_points`
         # points, so we need to interpolate.
@@ -475,14 +492,66 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     elif(v0 != 0x46 and num_points <= 16385):
         # Simple case: curve = values. Also, no split row here.
         curve = values
+        curve_max_len = num_points
     else:
         raise(Exception('Unsupported Nikon linearization curve.'))
     
     # Sometimes curve elements are repeated at the end. Get the number of 
     # distinct elements.
-    while(curve[num_points-2] == curve[num_points-1]):
-        num_points -= 1
+    while(curve[curve_max_len-2] == curve[curve_max_len-1]):
+        curve_max_len -= 1
     
+    # Now decode the pixel values. This is a bit of a mess, but not too bad.
+    pixel_abs_offset = raw_info['img_offset']
+    data.seek(pixel_abs_offset, os.SEEK_SET)
+    
+    # Get the image size.
+    width = raw_info['img_width']
+    height = raw_info['img_height']
+    
+    # Cast data into a bitarray of length width * height * 8
+    bit_reader = BitReader(data.read(width * height * 8))
+    
+    # Decode the pixels, one by one. This is still very confusing to me.
+    min = 0
+    num_bits = tree[0]
+    for row in range(200):
+        if(split_row != None and row == split_row):
+            tree = NIKON_TREE[tree_idx+1]
+            curve_max_len += 32
+            min = 16
+            num_bits = tree[0]
+        
+        for col in range(width):
+            # Remember to increment the index by 1: the 0-th element is not
+            # really part of the tree.
+            huff_idx = bit_reader.read(num_bits, update_position=False)
+            huff_idx += 1
+            i = tree[huff_idx][1]
+            bit_reader.pos += tree[huff_idx][0]
+            
+            len = i & 15
+            shl = i >> 4
+            n = len - shl
+            x = 0
+            if(n):
+                x = bit_reader.read(n)
+            
+            diff = ((x << 1) + 1) << shl >> 1
+            if (len < 1 or (diff & (1 << (len-1))) == 0):
+                diff -= (1 << len) - int(not shl)
+            
+            if (col < 2):
+                horiz_preds[col] += diff
+                vert_preds[row & 1][col] += diff
+            else:
+                horiz_preds[col & 1] += diff;
+            
+#             if ((ushort)(horiz_preds[col & 1] + min) >= max):
+#                 raise(Exception('Error in decon=ding pixel (%d, %d).' \
+#                                 % (col, row)))
+#             if ((unsigned) (col-left_margin) < width):
+#                 BAYER(row,col-left_margin) = curve[LIM((short)horiz_preds[col & 1],0,0x3fff)]
     return(curve)
 
 
