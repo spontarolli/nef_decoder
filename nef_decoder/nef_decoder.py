@@ -24,6 +24,7 @@ import cStringIO
 import os
 import struct
 
+import binutils
 import bitarray
 
 from huffman_tables import huff as NIKON_TREE
@@ -265,21 +266,18 @@ VERBOSE_TAG_FMT = '0x%04x  %s  %s  %02d  %s'
 
 class BitReader(object):
     def __init__(self, data_str):
+#         self.bit_buffer = ''.join([binutils.int2bin(unpack('B', c)[0], 8) 
+#                                    for c in data_str])
         bit_array = bitarray.bitarray()
         bit_array.fromstring(data_str)
         self.bit_buffer = bit_array.to01()
-        
-        # self.bit_buffer = bitarray.bitarray()
-        # self.bit_buffer.fromstring(data_str)
-        
         self.pos = 0
-        self._int_fn = int
         return
     
     def read(self, nbits, update_position=True):
         # value = binutils.bin2dec(self.bit_buffer[self.pos:self.pos+nbits].to01())
         # value = int(self.bit_buffer[self.pos:self.pos+nbits].to01(), 2)
-        value = int(self.bit_buffer[self.pos:self.pos+nbits], 2)
+        value = binutils.bin2int(self.bit_buffer[self.pos:self.pos+nbits])
         if(update_position):
             self.pos += nbits
         return(value)
