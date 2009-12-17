@@ -262,23 +262,6 @@ VERBOSE_TAG_FMT = '0x%04x  %s  %s  %02d  %s'
 
 
 
-
-class BitReader(object):
-    def __init__(self, data_str):
-        self.bit_buffer = binutils.data2bin(data_str)
-        self.pos = 0
-        return
-    
-    def read(self, nbits, update_position=True):
-        # value = binutils.bin2dec(self.bit_buffer[self.pos:self.pos+nbits].to01())
-        # value = int(self.bit_buffer[self.pos:self.pos+nbits].to01(), 2)
-        value = binutils.bin2int(self.bit_buffer[self.pos:self.pos+nbits])
-        if(update_position):
-            self.pos += nbits
-        return(value)
-
-
-
 def get_raw_image_info(ifds, 
                        img_type_tag_id=IMAGE_TYPE_TAG_ID,
                        img_width_tag_id=IMAGE_WIDTH_TAG_ID,
@@ -502,12 +485,13 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     width = raw_info['img_width']
     height = raw_info['img_height']
     
-    # Cast data into a bitarray of length width * height * 8
-    bit_reader = BitReader(data.read(width * height * 8))
+    # Cast data into a string of bits of length width * height * 8
+    bit_buffer = binutils.data2bin(data.read(width * height * 8))
     
     # Decode the pixels, one by one. This is still very confusing to me.
     min = 0
     num_bits = tree[0]
+    position = 0
     for row in range(200):
         if(split_row != None and row == split_row):
             tree = NIKON_TREE[tree_idx+1]
@@ -518,17 +502,20 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
         for col in range(width):
             # Remember to increment the index by 1: the 0-th element is not
             # really part of the tree.
-            huff_idx = bit_reader.read(num_bits, update_position=False)
+            huff_idx = binutils.bin2int(bit_buffer[position:position+num_bits])
+            
+            # TODO: avoid this increment by 1 somehow!
             huff_idx += 1
             i = tree[huff_idx][1]
-            bit_reader.pos += tree[huff_idx][0]
+            position += tree[huff_idx][0]
             
             len = i & 15
             shl = i >> 4
             n = len - shl
             x = 0
             if(n):
-                x = bit_reader.read(n)
+                x = binutils.bin2int(bit_buffer[position:position+n])
+                position += n
             
             diff = ((x << 1) + 1) << shl >> 1
             if (len < 1 or (diff & (1 << (len-1))) == 0):
