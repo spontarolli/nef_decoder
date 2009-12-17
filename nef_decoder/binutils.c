@@ -3,13 +3,7 @@
 
 Credits: c_bin2dec dilip.mathews: http://www.daniweb.com/code/snippet216372.html
 */
-#include <Python.h>
-
-
-
-const char* inttobin(int);
-void strtobin(const char*, int, char*);
-int bintoint(const char *, int);
+#include "binutils.h"
 
 
 
@@ -269,7 +263,6 @@ static PyObject * data2bin(PyObject *self, PyObject *args) {
     strtobin(data, len, bin);
     return(Py_BuildValue("s", bin));
 }
-
 
 
 
