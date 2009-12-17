@@ -419,13 +419,12 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     else:
         v0, v1 = unpack('BB', data.read(2))
     
-    # Choose the appropriate NIKON Huffman tree.
+    # Choose the appropriate NIKON Huffman tree index.
     tree_index = 0
     if(v0 == 0x46):
         tree_index = 2
     if(image_bps == 14):
         tree_index += 3
-    tree = NIKON_TREE[tree_index]
     
     # For some combination of v0 and v1 we need to seek ahead a fixed ammount.
     if(v0 == 0x49 or v1 == 0x58):
@@ -452,12 +451,12 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
         # points, so we need to interpolate.
         step = int(float(curve_max_len) / float(curve_size - 1))
         curve = [0, ] * curve_max_len
-        for i in range(num_points):
+        for i in xrange(num_points):
             curve[i*step] = values[i]
         
         # Now interpolate between those values.
         step = float(step)
-        for i in range(curve_max_len):
+        for i in xrange(curve_max_len):
             curve[i] = int(float(curve[i-i%step] * (step-i%step) +
                                  curve[i-i%step+step] * (i%step)) / step)
         
@@ -490,42 +489,40 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     
     # Decode the pixels, one by one. This is still very confusing to me.
     min = 0
-    num_bits = tree[0]
     position = 0
-    for row in range(200):
+    height = 500
+    range_width = xrange(width)
+    num_bits, tree = NIKON_TREE[tree_index]
+    for row in xrange(height):
         if(split_row != None and row == split_row):
-            tree = NIKON_TREE[tree_idx+1]
+            num_bits, tree = NIKON_TREE[tree_index+1]
             curve_max_len += 32
             min = 16
-            num_bits = tree[0]
         
-        for col in range(width):
+        for col in range_width:
             # Remember to increment the index by 1: the 0-th element is not
             # really part of the tree.
             huff_idx = binutils.bin2int(bit_buffer[position:position+num_bits])
             
             # TODO: avoid this increment by 1 somehow!
             huff_idx += 1
-            i = tree[huff_idx][1]
-            position += tree[huff_idx][0]
+            (pos_offset, len, shl, n) = tree[huff_idx]
+            position += pos_offset
             
-            len = i & 15
-            shl = i >> 4
-            n = len - shl
             x = 0
             if(n):
                 x = binutils.bin2int(bit_buffer[position:position+n])
                 position += n
             
-            diff = ((x << 1) + 1) << shl >> 1
-            if (len < 1 or (diff & (1 << (len-1))) == 0):
-                diff -= (1 << len) - int(not shl)
-            
-            if (col < 2):
-                horiz_preds[col] += diff
-                vert_preds[row & 1][col] += diff
-            else:
-                horiz_preds[col & 1] += diff;
+#             diff = ((x << 1) + 1) << shl >> 1
+#             if (len < 1 or (diff & (1 << (len-1))) == 0):
+#                 diff -= (1 << len) - int(not shl)
+#             
+#             if (col < 2):
+#                 horiz_preds[col] += diff
+#                 vert_preds[row & 1][col] += diff
+#             else:
+#                 horiz_preds[col & 1] += diff;
             
 #             if ((ushort)(horiz_preds[col & 1] + min) >= max):
 #                 raise(Exception('Error in decon=ding pixel (%d, %d).' \
