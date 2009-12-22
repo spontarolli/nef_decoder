@@ -504,8 +504,6 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
             # really part of the tree.
             huff_idx = binutils.bin2int(bit_buffer[position:position+num_bits])
             
-            # TODO: avoid this increment by 1 somehow!
-            huff_idx += 1
             (pos_offset, len, shl, n) = tree[huff_idx]
             position += pos_offset
             
@@ -890,3 +888,4 @@ Example
         f.write(output_img)
         f.close()
     sys.exit(0)
+
