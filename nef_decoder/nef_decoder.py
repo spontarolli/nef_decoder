@@ -26,6 +26,8 @@ import struct
 
 import binutils
 
+import numpy
+
 from huffman_tables import huff as NIKON_TREE
 
 # File format resources:
@@ -407,9 +409,9 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     image_bps = raw_info['img_bps']
     
     # Get the abs offset to the linearization curve.
-    [abs_offset, tag, typ_fmt, len, val] = makernote_ifd[NIKON_LINCURVE_TAG_ID]
+    [abs_offset, tag, typ_fmt, l, val] = makernote_ifd[NIKON_LINCURVE_TAG_ID]
     
-    # Remember that val is already a list of len elements of type typ_fmt.
+    # Remember that val is already a list of l elements of type typ_fmt.
     data.seek(abs_offset, os.SEEK_SET)
     
     # See is we have to do any reading from data.
@@ -485,48 +487,57 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     height = raw_info['img_height']
     
     # Cast data into a string of bits of length width * height * 8
-    bit_buffer = binutils.data2bin(data.read(width * height * 8))
+    bit_buffer = binutils.data2bin(data.read())
     
     # Decode the pixels, one by one. This is still very confusing to me.
     min = 0
     position = 0
-    height = 500
-    range_width = xrange(width)
     num_bits, tree = NIKON_TREE[tree_index]
+    len_tree = len(tree)
+    deltas = numpy.zeros(shape=(height, width))
     for row in xrange(height):
         if(split_row != None and row == split_row):
             num_bits, tree = NIKON_TREE[tree_index+1]
             curve_max_len += 32
             min = 16
         
-        for col in range_width:
-            # Remember to increment the index by 1: the 0-th element is not
-            # really part of the tree.
+        for col in xrange(width):
+            # Read num_bits bits from the file (or wherever the data is stored),
+            # interpret them as a C unsigned char from which you can derive a
+            # bunch of stuff (using the appropriate Huffman tree):
+            #  - The length in bits of the acual data on the tree.
+            #  - The length in bits of the pixel delta (in binary form).
+            #  - Any correction to the length above.
+            # Conveniently, the trees in huffman_tables.py already provide those
+            # numbers in the right place:
+            #  tree[i] = (bits_read, length, currection, length-corection)
             huff_idx = binutils.bin2int(bit_buffer[position:position+num_bits])
             
-            (pos_offset, len, shl, n) = tree[huff_idx]
-            position += pos_offset
+            (num_read, raw_len, corr, delta_len) = tree[huff_idx]
+            position += num_read
             
-            x = 0
-            if(n):
-                x = binutils.bin2int(bit_buffer[position:position+n])
-                position += n
+            # Now read delta_len bits. That, pretty much, is the difference in 
+            # value between adjacent pixel values: 
+            #  delta = pixel - pixel_to_the_left
+            # Beware that the same treatement is done vertically to the first 
+            # column.
+            if(not delta_len):
+                delta = 0
+            else:
+                x = binutils.bin2int(bit_buffer[position:position+delta_len])
+                delta = ((x << 1) + 1) << corr >> 1
+                if((delta & (1 << (raw_len - 1))) == 0):
+                    delta -= (1 << raw_len) - ~corr
             
-#             diff = ((x << 1) + 1) << shl >> 1
-#             if (len < 1 or (diff & (1 << (len-1))) == 0):
-#                 diff -= (1 << len) - int(not shl)
-#             
-#             if (col < 2):
-#                 horiz_preds[col] += diff
-#                 vert_preds[row & 1][col] += diff
-#             else:
-#                 horiz_preds[col & 1] += diff;
-            
-#             if ((ushort)(horiz_preds[col & 1] + min) >= max):
-#                 raise(Exception('Error in decon=ding pixel (%d, %d).' \
-#                                 % (col, row)))
-#             if ((unsigned) (col-left_margin) < width):
-#                 BAYER(row,col-left_margin) = curve[LIM((short)horiz_preds[col & 1],0,0x3fff)]
+            deltas[row, col] = delta
+            position += delta_len
+    
+    # Now turn all those deltas in pixel values. The only raw pixel value is 
+    # the one at top, left for each color. Differences are done color by color.
+    
+    # These are rescaled pixel values. To get the real pixel values we need to
+    # multiply their value by the linearization curve.
+    print(deltas)
     return(curve)
 
 
