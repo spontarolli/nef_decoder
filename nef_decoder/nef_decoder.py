@@ -430,6 +430,7 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     
     # For some combination of v0 and v1 we need to seek ahead a fixed ammount.
     if(v0 == 0x49 or v1 == 0x58):
+        # FIXME: is it correct? Do we need to add 2 (see dcraw.c:1137)?
         data.seek(abs_offset + 2 + 2110, os.SEEK_SET)
     
     # Read the vertical predictor 2x2 matrix.
@@ -440,7 +441,11 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
      vert_preds[0][1],
      vert_preds[1][0],
      vert_preds[1][1]) = unpack('HHHH', data.read(8))
+    
+    max = 1 << image_bps & 0x7fff
     num_points = unpack('H', data.read(2))[0]
+    if(num_points > 1):
+        step = int(float(max) / (num_points - 1))
     values = unpack('H'*num_points, data.read(num_points * 2))
     
     # Decode the curve.
@@ -489,11 +494,44 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     # Cast data into a string of bits of length width * height * 8
     bit_buffer = binutils.data2bin(data.read())
     
+    # Decode the actual pixel differences/deltas.
+    deltas = decode_pixel_deltas(width, 
+                                 height, 
+                                 tree_index, 
+                                 bit_buffer, 
+                                 split_row)
+    
+    # Now turn all those deltas in pixel values. The only raw pixel value is 
+    # the one at top, left for each color. Differences are done color by color.
+    pixels = compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
+    
+    if(verbose):
+        import Image
+        
+        img = Image.fromarray(pixels)
+        img.show()
+    
+    # These are rescaled pixel values. To get the real pixel values we need to
+    # multiply their value by the linearization curve.
+    return(curve)
+
+
+def decode_pixel_deltas(width, height, tree_index, bit_buffer, split_row):
+    """
+    Instead of encoding the raw pixel values, NEFs encode the difference between
+    each pixel and the pixel to its left (row-wise). The sam ething happens for 
+    pixels of the first column (each is subtracted to the pixel above). The
+    differences, or deltas, are then turned into binary and the length of their 
+    binary representation is huffman encoded. What we have in the NEF is the
+    huffman encoded list of delta lengths. The nice thing about huffman encoding
+    is that no leaf value (in binary) is a prefix of any other value.
+    """
     # Decode the pixels, one by one. This is still very confusing to me.
     min = 0
     position = 0
     num_bits, tree = NIKON_TREE[tree_index]
     len_tree = len(tree)
+    
     deltas = numpy.zeros(shape=(height, width))
     for row in xrange(height):
         if(split_row != None and row == split_row):
@@ -526,20 +564,68 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
             else:
                 x = binutils.bin2int(bit_buffer[position:position+delta_len])
                 delta = ((x << 1) + 1) << corr >> 1
-                if((delta & (1 << (raw_len - 1))) == 0):
-                    delta -= (1 << raw_len) - ~corr
+                if((delta & (1 << (raw_len - 1))) == 0 and corr == 0):
+                    # In C !0 = 1; in Python ~0 = -1...
+                    delta -= (1 << raw_len) - 1
+                elif((delta & (1 << (raw_len - 1))) == 0 and corr != 0):
+                    delta -= (1 << raw_len)
             
             deltas[row, col] = delta
             position += delta_len
-    
-    # Now turn all those deltas in pixel values. The only raw pixel value is 
-    # the one at top, left for each color. Differences are done color by color.
-    
-    # These are rescaled pixel values. To get the real pixel values we need to
-    # multiply their value by the linearization curve.
-    print(deltas)
-    return(curve)
+    return(deltas)
 
+
+def compute_pixel_values(deltas, horiz_preds, vert_preds, curve):
+    """
+    First take the first column and, starting from the bottom (actally the 
+    second to last pixel) and going up, add to each delta the value immediately 
+    before it.
+    
+    Then, for every row, starting from the left (again, from the second item) 
+    and going right, add to each delta the value immediately to its left.
+    
+    What you get are the linearity corrected pixel values. You should really do 
+    it color by color.
+    """
+    def boxit(val, low, high):
+        return(max(min(val, high), low))
+    
+    
+    # FIXME: Do this color by color!
+    h, w = deltas.shape
+    pixels = numpy.zeros(shape = deltas.shape)    
+    real_width = w - 1
+    # i = 0
+    for row in xrange(h):
+        for col in xrange(w):
+            if(col < 2):
+                vert_preds[row & 1][col] += deltas[row, col]
+                horiz_preds[col] = vert_preds[row & 1][col]
+            else:
+                horiz_preds[col & 1] += deltas[row, col]
+            
+            if(col < real_width):
+                v = curve[int(boxit(horiz_preds[col & 1], 0, 0x3fff))]
+                pixels[row, col] = v
+                # print('pixels[%d] = %d' % (i, v))
+                # i += 1
+
+#     # Process the first column: from the second to last element to the first.
+#     for i in xrange(h-2, -1, -1):
+#         pixels[i, 0] += pixels[i+1, 0]
+#     
+#     # Now process each row the same way, but going from the second element to 
+#     # the last and from top to bottom.
+#     k = 0
+#     real_width = w - 1
+#     for i in xrange(h):
+#         for j in xrange(1, w, 1):
+#             pixels[i, j] += pixels[i, j-1]
+#             if(j < real_width):
+#                 print('pixels[%d] = %d' % (k, pixels[i, j]))
+#                 k += 1
+    return(pixels)
+    
 
 def decode_file(file_name, verbose=False):
     """
@@ -819,14 +905,6 @@ def decode_ifd(data,
     return(dirs)
     
     
-
-
-
-
-
-
-
-
 
 
 
