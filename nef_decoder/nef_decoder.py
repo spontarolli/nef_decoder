@@ -508,7 +508,7 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     if(verbose):
         import Image
         
-        img = Image.fromarray(pixels)
+        img = Image.fromarray(pixels, 'RGBA')
         img.show()
     
     # These are rescaled pixel values. To get the real pixel values we need to
@@ -575,7 +575,7 @@ def decode_pixel_deltas(width, height, tree_index, bit_buffer, split_row):
     return(deltas)
 
 
-def compute_pixel_values(deltas, horiz_preds, vert_preds, curve):
+def compute_pixel_values(deltas, horiz_preds, vert_preds, curve, left_margin=0):
     """
     First take the first column and, starting from the bottom (actally the 
     second to last pixel) and going up, add to each delta the value immediately 
@@ -591,11 +591,12 @@ def compute_pixel_values(deltas, horiz_preds, vert_preds, curve):
         return(max(min(val, high), low))
     
     
-    # FIXME: Do this color by color!
+    # TODO: This has to computed from the CFA Pattern 2 tag value!
+    filters = 0x1e1e1e1e
+    
     h, w = deltas.shape
-    pixels = numpy.zeros(shape = deltas.shape)    
+    pixels = numpy.zeros(shape=(h, w, 4), dtype=numpy.uint8)
     real_width = w - 1
-    # i = 0
     for row in xrange(h):
         for col in xrange(w):
             if(col < 2):
@@ -605,25 +606,9 @@ def compute_pixel_values(deltas, horiz_preds, vert_preds, curve):
                 horiz_preds[col & 1] += deltas[row, col]
             
             if(col < real_width):
+                c = (filters >> ((((row) << 1 & 14) + ((col-left_margin) & 1)) << 1) & 3)
                 v = curve[int(boxit(horiz_preds[col & 1], 0, 0x3fff))]
-                pixels[row, col] = v
-                # print('pixels[%d] = %d' % (i, v))
-                # i += 1
-
-#     # Process the first column: from the second to last element to the first.
-#     for i in xrange(h-2, -1, -1):
-#         pixels[i, 0] += pixels[i+1, 0]
-#     
-#     # Now process each row the same way, but going from the second element to 
-#     # the last and from top to bottom.
-#     k = 0
-#     real_width = w - 1
-#     for i in xrange(h):
-#         for j in xrange(1, w, 1):
-#             pixels[i, j] += pixels[i, j-1]
-#             if(j < real_width):
-#                 print('pixels[%d] = %d' % (k, pixels[i, j]))
-#                 k += 1
+                pixels[row, col, c] = v
     return(pixels)
     
 
