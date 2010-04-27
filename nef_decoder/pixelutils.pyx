@@ -1,20 +1,27 @@
+# cython: profile=True
 import numpy
 cimport numpy
+# cimport cython
 
 import binutils
 
 
 
-# Min/Max routines.
-cdef inline int int_max(int a, int b): return a if a >= b else b
-cdef inline int int_min(int a, int b): return a if a <= b else b
-
 # Boxit routine
-cdef inline int int_boxit_fast(int a, int low, int high): return int_max(int_min(a, high), low)
+cdef inline int int_boxit_fast(int x, int low, int high):
+    if(x < low):
+        return(low)
+    elif(x > high):
+        return(high)
+    return(x)
 
 
 
+def bin2int(str data):
+    return(binutils.bin2int(data))
 
+
+# @cython.boundscheck(False)
 def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas, 
                          list horiz_preds, 
                          list vert_preds, 
@@ -61,6 +68,7 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
     return(pixels)
 
 
+# @cython.boundscheck(False)
 def decode_pixel_deltas(int width, 
                         int height, 
                         int tree_index, 
@@ -106,7 +114,7 @@ def decode_pixel_deltas(int width,
             # Conveniently, the trees in huffman_tables.py already provide those
             # numbers in the right place:
             #  tree[i] = (bits_read, length, currection, length-corection)
-            huff_idx = binutils.bin2int(bit_buffer[position:position+num_bits])
+            huff_idx = bin2int(bit_buffer[position:position+num_bits])
             
             (num_read, raw_len, corr, delta_len) = tree[huff_idx]
             position += num_read
@@ -119,7 +127,7 @@ def decode_pixel_deltas(int width,
             if(not delta_len):
                 delta = 0
             else:
-                x = binutils.bin2int(bit_buffer[position:position+delta_len])
+                x = bin2int(bit_buffer[position:position+delta_len])
                 delta = ((x << 1) + 1) << corr >> 1
                 if((delta & (1 << (raw_len - 1))) == 0 and corr == 0):
                     # In C !0 = 1; in Python ~0 = -1...
