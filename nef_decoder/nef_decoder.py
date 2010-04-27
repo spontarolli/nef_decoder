@@ -502,11 +502,6 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
                                             bit_buffer, 
                                             split_row,
                                             NIKON_TREE)
-#     deltas = decode_pixel_deltas(width, 
-#                                  height, 
-#                                  tree_index, 
-#                                  bit_buffer, 
-#                                  split_row)
     
     # Now turn all those deltas in pixel values. The only raw pixel value is 
     # the one at top, left for each color. Differences are done color by color.
