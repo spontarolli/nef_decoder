@@ -1,0 +1,138 @@
+import numpy
+cimport numpy
+
+import binutils
+
+
+
+# Min/Max routines.
+cdef inline int int_max(int a, int b): return a if a >= b else b
+cdef inline int int_min(int a, int b): return a if a <= b else b
+
+# Boxit routine
+cdef inline int int_boxit_fast(int a, int low, int high): return int_max(int_min(a, high), low)
+
+
+
+
+def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas, 
+                         list horiz_preds, 
+                         list vert_preds, 
+                         tuple curve, 
+                         int left_margin=0):
+    """
+    First take the first column and, starting from the bottom (actally the 
+    second to last pixel) and going up, add to each delta the value immediately 
+    before it.
+    
+    Then, for every row, starting from the left (again, from the second item) 
+    and going right, add to each delta the value immediately to its left.
+    
+    What you get are the linearity corrected pixel values. You should really do 
+    it color by color.
+    """
+    # TODO: This has to computed from the CFA Pattern 2 tag value!
+    filters = 0x1e1e1e1e
+    
+    cdef Py_ssize_t h = deltas.shape[0]
+    cdef Py_ssize_t w = deltas.shape[1]
+    cdef Py_ssize_t real_width = w - 1
+    cdef Py_ssize_t row = 0
+    cdef Py_ssize_t col = 0
+    cdef Py_ssize_t c = 0
+    cdef Py_ssize_t v = 0
+    cdef int curve_len = len(curve) - 1
+    cdef numpy.ndarray[numpy.uint8_t, ndim=3] pixels = numpy.zeros(shape=(h, w, 4), 
+                                                                   dtype=numpy.uint8)
+    
+    for row in range(h):
+        for col in range(w):
+            if(col < 2):
+                vert_preds[row & 1][col] += deltas[row, col]
+                horiz_preds[col] = vert_preds[row & 1][col]
+            else:
+                horiz_preds[col & 1] += deltas[row, col]
+            
+            if(col < real_width):
+                c = (filters >> ((((row) << 1 & 14) + ((col-left_margin) & 1)) << 1) & 3)
+                # v = curve[int_boxit_fast(horiz_preds[col & 1], 0, curve_len)]
+                v = curve[int_boxit_fast(horiz_preds[col & 1], 0, 0x3fff)]
+                pixels[row, col, c] = v
+    return(pixels)
+
+
+def decode_pixel_deltas(int width, 
+                        int height, 
+                        int tree_index, 
+                        str bit_buffer, 
+                        int split_row,
+                        list NIKON_TREE):
+    """
+    Instead of encoding the raw pixel values, NEFs encode the difference between
+    each pixel and the pixel to its left (row-wise). The sam ething happens for 
+    pixels of the first column (each is subtracted to the pixel above). The
+    differences, or deltas, are then turned into binary and the length of their 
+    binary representation is huffman encoded. What we have in the NEF is the
+    huffman encoded list of delta lengths. The nice thing about huffman encoding
+    is that no leaf value (in binary) is a prefix of any other value.
+    """
+    # Decode the pixels, one by one. This is still very confusing to me.
+    cdef int position = 0
+    cdef int num_bits = 0
+    cdef list tree = []
+    cdef int len_tree = len(tree)
+    cdef int huff_idx = 0
+    cdef int num_read = 0
+    cdef int raw_len = 0
+    cdef int corr = 0
+    cdef int delta_len = 0
+    cdef int x = 0
+    cdef int delta = 0
+    cdef  numpy.ndarray[numpy.int16_t, ndim=2] deltas = numpy.zeros(shape=(height, width), 
+                                                                    dtype=numpy.int16)
+    
+    num_bits, tree = NIKON_TREE[tree_index]
+    for row in range(height):
+        if(split_row != -1 and row == split_row):
+            num_bits, tree = NIKON_TREE[tree_index+1]
+        
+        for col in range(width):
+            # Read num_bits bits from the file (or wherever the data is stored),
+            # interpret them as a C unsigned char from which you can derive a
+            # bunch of stuff (using the appropriate Huffman tree):
+            #  - The length in bits of the acual data on the tree.
+            #  - The length in bits of the pixel delta (in binary form).
+            #  - Any correction to the length above.
+            # Conveniently, the trees in huffman_tables.py already provide those
+            # numbers in the right place:
+            #  tree[i] = (bits_read, length, currection, length-corection)
+            huff_idx = binutils.bin2int(bit_buffer[position:position+num_bits])
+            
+            (num_read, raw_len, corr, delta_len) = tree[huff_idx]
+            position += num_read
+            
+            # Now read delta_len bits. That, pretty much, is the difference in 
+            # value between adjacent pixel values: 
+            #  delta = pixel - pixel_to_the_left
+            # Beware that the same treatement is done vertically to the first 
+            # column.
+            if(not delta_len):
+                delta = 0
+            else:
+                x = binutils.bin2int(bit_buffer[position:position+delta_len])
+                delta = ((x << 1) + 1) << corr >> 1
+                if((delta & (1 << (raw_len - 1))) == 0 and corr == 0):
+                    # In C !0 = 1; in Python ~0 = -1...
+                    delta -= (1 << raw_len) - 1
+                elif((delta & (1 << (raw_len - 1))) == 0 and corr != 0):
+                    delta -= (1 << raw_len)
+            
+            deltas[row, col] = delta
+            position += delta_len
+    return(deltas)
+
+
+
+
+
+
