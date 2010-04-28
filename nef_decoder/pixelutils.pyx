@@ -58,19 +58,22 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
     cdef int curve_len = len(curve) - 1
     cdef numpy.ndarray[numpy.uint8_t, ndim=3] pixels = numpy.zeros(shape=(h, w, 4), 
                                                                    dtype=numpy.uint8)
+    cdef numpy.ndarray[numpy.int16_t, ndim=2] vpreds = numpy.array(vert_preds, 
+                                                                   dtype=numpy.int16)
+    cdef numpy.ndarray[numpy.int16_t, ndim=1] hpreds = numpy.array(horiz_preds, 
+                                                                   dtype=numpy.int16)
     
     for row in range(h):
         for col in range(w):
             if(col < 2):
-                vert_preds[row & 1][col] += deltas[row, col]
-                horiz_preds[col] = vert_preds[row & 1][col]
+                vpreds[row & 1][col] += deltas[row, col]
+                hpreds[col] = vpreds[row & 1][col]
             else:
-                horiz_preds[col & 1] += deltas[row, col]
+                hpreds[col & 1] += deltas[row, col]
             
             if(col < real_width):
                 c = (filters >> ((((row) << 1 & 14) + ((col-left_margin) & 1)) << 1) & 3)
-                # v = curve[int_boxit_fast(horiz_preds[col & 1], 0, curve_len)]
-                v = curve[int_boxit_fast(horiz_preds[col & 1], 0, 0x3fff)]
+                v = curve[int_boxit_fast(hpreds[col & 1], 0, 0x3fff)]
                 pixels[row, col, c] = v
     return(pixels)
 
