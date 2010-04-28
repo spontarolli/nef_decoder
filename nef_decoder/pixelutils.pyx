@@ -3,11 +3,9 @@ import numpy
 cimport numpy
 # cimport cython
 
-import binutils
 
 
-
-# Boxit routine
+# Utility routines.
 cdef inline int int_boxit_fast(int x, int low, int high):
     if(x < low):
         return(low)
@@ -16,9 +14,23 @@ cdef inline int int_boxit_fast(int x, int low, int high):
     return(x)
 
 
-
-def bin2int(str data):
-    return(binutils.bin2int(data))
+cdef int bintoint(str bin):
+    # Convert the binary string `bin` of length `len` into an integer.
+    # We assume that bin is a string composed of '1's and '0's only but we do 
+    # not check (for performance reasons).
+    cdef int  b , k, n, l
+    cdef int  sum = 0
+ 
+    l = len(bin)
+    for k in range(l):
+        if(bin[k] == '1'):
+            n = 1
+        else:
+            n = 0
+        b = 1 << (l-k-1)
+        # sum it up
+        sum = sum + n * b
+    return(sum)
 
 
 # @cython.boundscheck(False)
@@ -114,7 +126,8 @@ def decode_pixel_deltas(int width,
             # Conveniently, the trees in huffman_tables.py already provide those
             # numbers in the right place:
             #  tree[i] = (bits_read, length, currection, length-corection)
-            huff_idx = bin2int(bit_buffer[position:position+num_bits])
+            # huff_idx = bin2int(bit_buffer[position:position+num_bits])
+            huff_idx = bintoint(bit_buffer[position:position+num_bits])
             
             (num_read, raw_len, corr, delta_len) = tree[huff_idx]
             position += num_read
@@ -127,7 +140,7 @@ def decode_pixel_deltas(int width,
             if(not delta_len):
                 delta = 0
             else:
-                x = bin2int(bit_buffer[position:position+delta_len])
+                x = bintoint(bit_buffer[position:position+delta_len])
                 delta = ((x << 1) + 1) << corr >> 1
                 if((delta & (1 << (raw_len - 1))) == 0 and corr == 0):
                     # In C !0 = 1; in Python ~0 = -1...
