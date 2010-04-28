@@ -1,4 +1,4 @@
-# cython: profile=True
+# cython: profile=False
 import numpy
 cimport numpy
 # cimport cython
@@ -18,18 +18,13 @@ cdef int bintoint(str bin):
     # Convert the binary string `bin` of length `len` into an integer.
     # We assume that bin is a string composed of '1's and '0's only but we do 
     # not check (for performance reasons).
-    cdef int  b , k, n, l
+    cdef int  k, l
     cdef int  sum = 0
  
     l = len(bin)
     for k in range(l):
         if(bin[k] == '1'):
-            n = 1
-        else:
-            n = 0
-        b = 1 << (l-k-1)
-        # sum it up
-        sum = sum + n * b
+            sum += (1 << (l-k-1))
     return(sum)
 
 
@@ -110,8 +105,8 @@ def decode_pixel_deltas(Py_ssize_t width,
     cdef int delta = 0
     cdef Py_ssize_t row = 0
     cdef Py_ssize_t col = 0
-    cdef  numpy.ndarray[numpy.int16_t, ndim=2] deltas = numpy.zeros(shape=(height, width), 
-                                                                    dtype=numpy.int16)
+    cdef numpy.ndarray[numpy.int16_t, ndim=2] deltas = numpy.zeros(shape=(height, width), 
+                                                                   dtype=numpy.int16)
     
     num_bits, tree = NIKON_TREE[tree_index]
     if(split_row == -1):
