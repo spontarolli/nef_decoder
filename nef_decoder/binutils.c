@@ -308,10 +308,68 @@ static PyObject * bin2int(PyObject *self, PyObject *args, PyObject *keywds) {
 
 
 
+PyDoc_STRVAR(doc_boxit_fast, 
+        "int, int, int-> int. Make sure that the input integer is between the two boundaries. No safety checks.");
+static PyObject * boxit_fast(PyObject *self, PyObject *args) {
+    int x;
+    const int low, high;
+
+    
+    // Parse input arguments.
+    if (!PyArg_ParseTuple(args, "iii", &x, &low, &high))
+        return(NULL);
+    
+    // Make sure that x is between low and high. If not, return the closest 
+    // boundary. For performance sake, we do not do any safety check.
+    if(x < low)
+        return(Py_BuildValue("i", low));
+    else if(x > high)
+        return(Py_BuildValue("i", high));
+    return(Py_BuildValue("i", x));
+}
+
+
+
+PyDoc_STRVAR(doc_boxit, 
+        "int, int, int-> int. Make sure that the input integer is between the two boundaries.");
+static PyObject * boxit(PyObject *self, PyObject *args) {
+    int x;
+    const int low, high;
+    int l, h;
+
+    
+    // Parse input arguments.
+    if (!PyArg_ParseTuple(args, "iii", &x, &low, &high))
+        return(NULL);
+    
+    // Make sure that low is < high.
+    if(low == high) {
+        return(Py_BuildValue("i", low));
+    } else if(low < high) {
+        l = low;
+        h = high;
+    } else {
+        l = high;
+        h = low;
+    }
+    
+    // Make sure that x is between low and high. If not, return the closest 
+    // boundary. For performance sake, we do not do any safety check.
+    if(x < l)
+        return(Py_BuildValue("i", l));
+    else if(x > h)
+        return(Py_BuildValue("i", h));
+    return(Py_BuildValue("i", x));
+}
+
+
+
 static PyMethodDef binutils_methods[] = {
     {"int2bin",  int2bin, METH_VARARGS, doc_int2bin},
     {"data2bin",  data2bin, METH_VARARGS, doc_data2bin},
     {"bin2int",  (PyCFunction)bin2int, METH_VARARGS|METH_KEYWORDS, doc_bin2int},
+    {"boxit_fast",  boxit_fast, METH_VARARGS, doc_boxit_fast},
+    {"boxit",  boxit, METH_VARARGS, doc_boxit},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
