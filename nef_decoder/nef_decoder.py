@@ -20,11 +20,9 @@ Options
 Example
     nef_decoder.py -o bar.jpg foo.nef
 """
-import cStringIO
 import os
 import struct
 
-import binutils
 import pixelutils
 
 import numpy
@@ -493,7 +491,9 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     height = raw_info['img_height']
     
     # Cast data into a string of bits of length width * height * 8
-    bit_buffer = binutils.data2bin(data.read())
+    byte_buffer = numpy.fromfile(data, dtype=numpy.uint8)
+    bit_buffer = numpy.ascontiguousarray(numpy.unpackbits(byte_buffer), 
+                                         dtype=numpy.uint8)
     
     # Decode the actual pixel differences/deltas.
     deltas = pixelutils.decode_pixel_deltas(width, 
@@ -526,11 +526,9 @@ def decode_file(file_name, verbose=False):
     """
     # Read the NEF data.
     f = open(file_name, 'rb')
-    nef_data = cStringIO.StringIO(f.read())
+    output = decode_nef(f, verbose)
     f.close()
-    
-    # Return the decoded output.
-    return(decode_nef(nef_data, verbose))
+    return(output)
 
 
 def decode_nef(data, verbose=False):

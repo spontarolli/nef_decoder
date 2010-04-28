@@ -14,17 +14,17 @@ cdef inline int int_boxit_fast(int x, int low, int high):
     return(x)
 
 
-cdef int bintoint(str bin):
+cdef int bintoint(char* bin, int f, int l):
     # Convert the binary string `bin` of length `len` into an integer.
     # We assume that bin is a string composed of '1's and '0's only but we do 
     # not check (for performance reasons).
-    cdef int  k, l
+    cdef Py_ssize_t  k
     cdef int  sum = 0
- 
-    l = len(bin)
-    for k in range(l):
-        if(bin[k] == '1'):
-            sum += (1 << (l-k-1))
+    cdef unsigned short i
+    
+    for k from f <= k < f+l:
+        i = <unsigned int>bin[k]
+        sum = sum + i * (1 << (l-k-1+f))
     return(sum)
 
 
@@ -82,7 +82,7 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
 def decode_pixel_deltas(Py_ssize_t width, 
                         Py_ssize_t height, 
                         int tree_index, 
-                        str bit_buffer, 
+                        numpy.ndarray[numpy.uint8_t, ndim=1] bit_buffer, 
                         int split_row,
                         list NIKON_TREE):
     """
@@ -110,6 +110,8 @@ def decode_pixel_deltas(Py_ssize_t width,
     cdef Py_ssize_t col = 0
     cdef numpy.ndarray[numpy.int16_t, ndim=2] deltas = numpy.zeros(shape=(height, width), 
                                                                    dtype=numpy.int16)
+    cdef char* bit_buffer_ptr = <char*>bit_buffer.data
+    
     
     num_bits, tree = NIKON_TREE[tree_index]
     if(split_row == -1):
@@ -124,7 +126,7 @@ def decode_pixel_deltas(Py_ssize_t width,
                 # Conveniently, the trees in huffman_tables.py already provide those
                 # numbers in the right place:
                 #  tree[i] = (bits_read, length, currection, length-corection)
-                huff_idx = bintoint(bit_buffer[position:position+num_bits])
+                huff_idx = bintoint(bit_buffer_ptr, position, num_bits)
                 
                 (num_read, raw_len, corr, delta_len) = tree[huff_idx]
                 position += num_read
@@ -137,7 +139,7 @@ def decode_pixel_deltas(Py_ssize_t width,
                 if(not delta_len):
                     delta = 0
                 else:
-                    x = bintoint(bit_buffer[position:position+delta_len])
+                    x = bintoint(bit_buffer_ptr, position, delta_len)
                     delta = ((x << 1) + 1) << corr >> 1
                     if((delta & (1 << (raw_len - 1))) == 0 and corr == 0):
                         # In C !0 = 1; in Python ~0 = -1...
@@ -147,45 +149,45 @@ def decode_pixel_deltas(Py_ssize_t width,
                 
                 deltas[row, col] = delta
                 position += delta_len
-    else:
-        for row in range(height):
-            if(row == split_row):
-                num_bits, tree = NIKON_TREE[tree_index+1]
-            
-            for col in range(width):
-                # Read num_bits bits from the file (or wherever the data is stored),
-                # interpret them as a C unsigned char from which you can derive a
-                # bunch of stuff (using the appropriate Huffman tree):
-                #  - The length in bits of the acual data on the tree.
-                #  - The length in bits of the pixel delta (in binary form).
-                #  - Any correction to the length above.
-                # Conveniently, the trees in huffman_tables.py already provide those
-                # numbers in the right place:
-                #  tree[i] = (bits_read, length, currection, length-corection)
-                # huff_idx = bin2int(bit_buffer[position:position+num_bits])
-                huff_idx = bintoint(bit_buffer[position:position+num_bits])
-                
-                (num_read, raw_len, corr, delta_len) = tree[huff_idx]
-                position += num_read
-                
-                # Now read delta_len bits. That, pretty much, is the difference in 
-                # value between adjacent pixel values: 
-                #  delta = pixel - pixel_to_the_left
-                # Beware that the same treatement is done vertically to the first 
-                # column.
-                if(not delta_len):
-                    delta = 0
-                else:
-                    x = bintoint(bit_buffer[position:position+delta_len])
-                    delta = ((x << 1) + 1) << corr >> 1
-                    if((delta & (1 << (raw_len - 1))) == 0 and corr == 0):
-                        # In C !0 = 1; in Python ~0 = -1...
-                        delta -= (1 << raw_len) - 1
-                    elif((delta & (1 << (raw_len - 1))) == 0 and corr != 0):
-                        delta -= (1 << raw_len)
-                
-                deltas[row, col] = delta
-                position += delta_len
+#     else:
+#         for row in range(height):
+#             if(row == split_row):
+#                 num_bits, tree = NIKON_TREE[tree_index+1]
+#             
+#             for col in range(width):
+#                 # Read num_bits bits from the file (or wherever the data is stored),
+#                 # interpret them as a C unsigned char from which you can derive a
+#                 # bunch of stuff (using the appropriate Huffman tree):
+#                 #  - The length in bits of the acual data on the tree.
+#                 #  - The length in bits of the pixel delta (in binary form).
+#                 #  - Any correction to the length above.
+#                 # Conveniently, the trees in huffman_tables.py already provide those
+#                 # numbers in the right place:
+#                 #  tree[i] = (bits_read, length, currection, length-corection)
+#                 # huff_idx = bin2int(bit_buffer[position:position+num_bits])
+#                 huff_idx = bintoint(bit_buffer_ptr, position, num_bits)
+#                 
+#                 (num_read, raw_len, corr, delta_len) = tree[huff_idx]
+#                 position += num_read
+#                 
+#                 # Now read delta_len bits. That, pretty much, is the difference in 
+#                 # value between adjacent pixel values: 
+#                 #  delta = pixel - pixel_to_the_left
+#                 # Beware that the same treatement is done vertically to the first 
+#                 # column.
+#                 if(not delta_len):
+#                     delta = 0
+#                 else:
+#                     x = bintoint(bit_buffer_ptr, position, delta_len)
+#                     delta = ((x << 1) + 1) << corr >> 1
+#                     if((delta & (1 << (raw_len - 1))) == 0 and corr == 0):
+#                         # In C !0 = 1; in Python ~0 = -1...
+#                         delta -= (1 << raw_len) - 1
+#                     elif((delta & (1 << (raw_len - 1))) == 0 and corr != 0):
+#                         delta -= (1 << raw_len)
+#                 
+#                 deltas[row, col] = delta
+#                 position += delta_len
     return(deltas)
 
 
