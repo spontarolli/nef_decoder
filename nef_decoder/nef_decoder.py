@@ -809,9 +809,6 @@ if(__name__ == '__main__'):
     import optparse
     import sys
     
-    import cProfile
-    
-
     
     # Constants
     USAGE = """NEF Decoder
@@ -846,6 +843,11 @@ Example
                       action='store_true',
                       dest='verbose',
                       default=False)
+    # Profiler flag
+    parser.add_option('-p', '--profile',
+                      action='store_true',
+                      dest='profile',
+                      default=False)
 
     
     # Get the command line options and also whatever is passed on STDIN.
@@ -856,9 +858,15 @@ Example
         parser.error('Please specify an input file.')
     
     # Convert the input file.
-    # output_img = decode_file(args[0], verbose=options.verbose)
-    cmd = 'output_img = decode_file(args[0], verbose=options.verbose)'
-    cProfile.runctx(cmd, globals(), locals(), filename="nef_decoder.prof" )
+    if(options.profile):
+        import cProfile
+        
+        print('Profiler on')
+        cmd = 'output_img = decode_file(args[0], verbose=options.verbose)'
+        cProfile.runctx(cmd, globals(), locals(), filename="nef_decoder.prof" )
+    else:
+        print('Profiler off')
+        output_img = decode_file(args[0], verbose=options.verbose)
     
     # If we do not have an output file name, just write to stdout.
     if(not options.output_name):
