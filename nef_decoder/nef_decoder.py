@@ -508,15 +508,133 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     # pixels = compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
     pixels = pixelutils.compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
     
+    # Now demosaic the Bayer pattern.
+    demosaiced = demosaic(pixels)
+    
     if(verbose):
         import Image
         
-        img = Image.fromarray(pixels, 'RGBA')
+        img = Image.fromarray(demosaiced, 'RGB')
         img.show()
     
     # These are rescaled pixel values. To get the real pixel values we need to
     # multiply their value by the linearization curve.
     return(curve)
+
+
+def demosaic(pixels):
+    """
+    We assume for now that the bayer pattern is 
+    
+        B G B G
+        G R G R
+    
+    Image sizes are even. This means that the padded input image pattern is
+        
+        0 B G B G 0
+        0 G R G R 0
+    """
+    if(False):
+        return(pixels)
+    
+    h = pixels.shape[0]
+    w = pixels.shape[1]
+    
+    # Create the output image the same size as the input image.
+    out = pixels.copy()
+    
+    # In what follows, we take care of the fact that the pixels at the edges 
+    # require special handlimng. The same thing could be achieved by expanding 
+    # the input image with a 1 pixel black border all around.
+    
+    
+    # R channel, one row at the time.
+    # We determine the (interpolated) red value at green pixel locations by 
+    # interpolating the two adjacent red values.
+    for i in range(1, h, 2):
+        # First the border pixels.
+        out[i, 0, 0] = .5 * pixels[i, 1, 0]
+        # Then all the rest.
+        out[i, 2:w:2, 0] = .5 * (pixels[i, 1:w-2:2, 0] + pixels[i, 3:w:2, 0])
+    
+    # We determine the (interpolated) red value at blue pixel locations by 
+    # interpolating the four diagonal red values.
+    # Top corner pixel.
+    out[0, 0, 0] = .25 * pixels[1, 1, 0]
+    # The rest of the top row.
+    out[0, 2:w:2, 0] = .25 * (pixels[1, 1:w-2:2, 0] + pixels[1, 3:w:2, 0])
+    for i in range(2, h, 2):
+        # Edge pixel first.
+        out[i, 0, 0] = .25 * (pixels[i-1, 1, 0] + pixels[i+1, 1, 0])
+        # All the rest.
+        out[i, 2:w:2, 0] = .25 * (pixels[i-1, 1:w-2:2, 0] + 
+                                  pixels[i-1, 3:w:2, 0] + 
+                                  pixels[i+1, 1:w-2:2, 0] + 
+                                  pixels[i+1, 3:w:2, 0])
+    
+    # B channel, one row at the time (same thing as with R).
+    # We determine the (interpolated) blue value at green pixel locations by 
+    # interpolating the two adjacent blue values.
+    for i in range(0, h, 2):
+        # The last column.
+        out[i, -1, 2] = .5 * pixels[i, -2, 2]
+        # The rest.
+        out[i, 1:w-2:2, 2] = .5 * (pixels[i, 0:w-3:2, 2] + pixels[i, 2:w:2, 2])
+    
+    # We determine the (interpolated) blue value at red pixel locations by 
+    # interpolating the four diagonal blue values.
+    # Bottom corner pixel.
+    out[-1, -1, 2] = .25 * pixels[-2, -2, 2]
+    # The rest of the bottom row.
+    out[-1, 1:w-2:2, 2] = .25 * (pixels[-2, 0:w-3:2, 2] + pixels[-2, 2:w:2, 2])
+    for i in range(1, h-2, 2):
+        # Edge pixel first.
+        out[i, -1, 2] = .25 * (pixels[i-1, -2, 2] + pixels[i+1, -2, 2])
+        # All the rest.
+        out[i, 1:w-2:2, 2] = .25 * (pixels[i-1, 0:w-3:2, 2] + 
+                                    pixels[i-1, 2:w:2, 2] + 
+                                    pixels[i+1, 0:w-3:2, 2] + 
+                                    pixels[i+1, 2:w:2, 2])
+    
+    # G channel, once row at the time.
+    # We determine the (interpolated) green value at red pixel locations by 
+    # interpolating the four cross green values.
+    # Bottom corner pixel.
+    out[-1, -1, 1] = .25 * (pixels[-2, -1, 1] + pixels[-1, -2, 1])
+    # The rest of the bottom row.
+    out[-1, 1:w-2:2, 1] = .25 * (pixels[-1, 0:w-3:2, 1] + 
+                                 pixels[-1, 2:w:2, 1] + 
+                                 pixels[-2, 1:w-2:2, 1])
+    for i in range(1, h-2, 2):
+        # Edge pixel first.
+        out[i, -1, 1] = .25 * (pixels[i-1, -1, 1] + 
+                               pixels[i, -2, 1] + 
+                               pixels[i+1, -1, 1])
+        # All the rest.
+        out[i, 1:w-2:2, 1] = .25 * (pixels[i-1, 1:w-2:2, 1] + 
+                                    pixels[i, 0:w-3:2, 1] + 
+                                    pixels[i, 2:w:2, 1] + 
+                                    pixels[i+1, 1:w-2:2, 1])
+    
+    # We determine the (interpolated) green value at blue pixel locations by 
+    # interpolating the four cross green values.
+    # Top corner pixel.
+    out[0, 0, 1] = .25 * (pixels[0, 1, 1] + pixels[1, 0, 1])
+    # The rest of the top row.
+    out[0, 2:w:2, 1] = .25 * (pixels[0, 1:w-2:2, 1] + 
+                              pixels[0, 3:w:2, 1] + 
+                              pixels[1, 2:w:2, 1])
+    for i in range(2, h, 2):
+        # Edge pixel first.
+        out[i, 0, 1] = .25 * (pixels[i-1, 0, 1] + 
+                              pixels[i, 1, 1] + 
+                              pixels[i+1, 0, 1])
+        # All the rest.
+        out[i, 2:w:2, 1] = .25 * (pixels[i-1, 2:w:2, 1] + 
+                                  pixels[i, 1:w-2:2, 1] + 
+                                  pixels[i, 3:w:2, 1] + 
+                                  pixels[i+1, 2:w:2, 1])
+    return(out)
 
 
 def decode_file(file_name, verbose=False):
