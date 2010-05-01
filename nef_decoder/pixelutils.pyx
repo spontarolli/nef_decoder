@@ -56,13 +56,15 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
     cdef Py_ssize_t c = 0
     cdef Py_ssize_t v = 0
     cdef int curve_len = len(curve) - 1
-    cdef numpy.ndarray[numpy.uint8_t, ndim=3] pixels = numpy.zeros(shape=(h, w, 4), 
-                                                                   dtype=numpy.uint8)
-    cdef numpy.ndarray[numpy.int16_t, ndim=2] vpreds = numpy.array(vert_preds, 
-                                                                   dtype=numpy.int16)
-    cdef numpy.ndarray[numpy.int16_t, ndim=1] hpreds = numpy.array(horiz_preds, 
-                                                                   dtype=numpy.int16)
+    cdef numpy.ndarray[numpy.uint16_t, ndim=3] pixels = numpy.zeros(shape=(3, h, w), 
+                                                                   dtype=numpy.uint16)
+    cdef numpy.ndarray[numpy.uint16_t, ndim=2] vpreds = numpy.array(vert_preds, 
+                                                                   dtype=numpy.uint16)
+    cdef numpy.ndarray[numpy.uint16_t, ndim=1] hpreds = numpy.array(horiz_preds, 
+                                                                   dtype=numpy.uint16)
     
+    # Now, the algorithm above returns colors in RGBG instead of RGBA, so we 
+    # have to add plane 3 to plane 1.
     for row in range(h):
         for col in range(w):
             if(col < 2):
@@ -74,7 +76,9 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
             if(col < real_width):
                 c = (filters >> ((((row) << 1 & 14) + ((col-left_margin) & 1)) << 1) & 3)
                 v = curve[int_boxit_fast(hpreds[col & 1], 0, 0x3fff)]
-                pixels[row, col, c] = v
+                if(c == 3):
+                    c = 1
+                pixels[c, row, col] += v
     return(pixels)
 
 
@@ -190,7 +194,133 @@ def decode_pixel_deltas(Py_ssize_t width,
     return(deltas)
 
 
-
+def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels):
+    """
+    We assume for now that the bayer pattern is 
+    
+        B G B G
+        G R G R
+    
+    Image sizes are even. This means that the padded input image pattern is
+        
+        0 B G B G 0
+        0 G R G R 0
+    """
+    cdef int i
+    cdef int h = pixels.shape[1]
+    cdef int w = pixels.shape[2]
+    
+    # Create the output image the same size as the input image.
+    cdef numpy.ndarray[numpy.double_t, ndim=3] out = pixels.astype(numpy.double).copy()
+    
+    # In what follows, we take care of the fact that the pixels at the edges 
+    # require special handlimng. The same thing could be achieved by expanding 
+    # the input image with a 1 pixel black border all around.
+    
+    
+    # R channel, one row at the time.
+    # We determine the (interpolated) red value at green pixel locations by 
+    # interpolating the two adjacent red values.
+    # Horizontals.
+    for i in range(1, h, 2):
+        # First the border pixels.
+        out[0, i, 0] = .5 * pixels[0, i, 1]
+        # Then all the rest.
+        out[0, i, 2:w:2] = .5 * (pixels[0, i, 1:w-2:2] + pixels[0, i, 3:w:2])
+    # Verticals.
+    # First the top row.
+    out[0, 0, 1:w:2] = .5 * pixels[0, 1, 1:w:2]
+    for i in range(2, h-1, 2):
+        # Then everything else.
+        out[0, i, 1:w:2] = .5 * (pixels[0, i-1, 1:w:2] + 
+                                 pixels[0, i+1, 1:w:2])
+    
+    # We determine the (interpolated) red value at blue pixel locations by 
+    # interpolating the four diagonal red values.
+    # Top corner pixel.
+    out[0, 0, 0] = .25 * pixels[0, 1, 1]
+    # The rest of the top row.
+    out[0, 0, 2:w:2] = .25 * (pixels[0, 1, 1:w-2:2] + pixels[0, 1, 3:w:2])
+    for i in range(2, h, 2):
+        # Edge pixel first.
+        out[0, i, 0] = .25 * (pixels[0, i-1, 1] + pixels[0, i+1, 1])
+        # All the rest.
+        out[0, i, 2:w:2] = .25 * (pixels[0, i-1, 1:w-2:2] + 
+                                  pixels[0, i-1, 3:w:2] + 
+                                  pixels[0, i+1, 1:w-2:2] + 
+                                  pixels[0, i+1, 3:w:2])
+    
+    # B channel, one row at the time (same thing as with R).
+    # We determine the (interpolated) blue value at green pixel locations by 
+    # interpolating the two adjacent blue values.
+    # Horizontals.
+    for i in range(0, h, 2):
+        # The last column.
+        out[2, i, -1] = .5 * pixels[2, i, -2]
+        # The rest.
+        out[2, i, 1:w-2:2] = .5 * (pixels[2, i, 0:w-3:2] + pixels[2, i, 2:w:2])
+    # Verticals.
+    # First the bottom row.
+    out[2, -1, 0:w:2] = .5 * pixels[2, -2, 0:w:2]
+    for i in range(1, h-2, 2):
+        # Then all the rest.
+        out[2, i, 0:w:2] = .5 * (pixels[2, i-1, 0:w:2] + 
+                                 pixels[2, i+1, 0:w:2])
+    
+    # We determine the (interpolated) blue value at red pixel locations by 
+    # interpolating the four diagonal blue values.
+    # Bottom corner pixel.
+    out[2, -1, -1] = .25 * pixels[2, -2, -2]
+    # The rest of the bottom row.
+    out[2, -1, 1:w-2:2] = .25 * (pixels[2, -2, 0:w-3:2] + pixels[2, -2, 2:w:2])
+    for i in range(1, h-2, 2):
+        # Edge pixel first.
+        out[2, i, -1] = .25 * (pixels[2, i-1, -2] + pixels[2, i+1, -2])
+        # All the rest.
+        out[2, i, 1:w-2:2] = .25 * (pixels[2, i-1, 0:w-3:2] + 
+                                    pixels[2, i-1, 2:w:2] + 
+                                    pixels[2, i+1, 0:w-3:2] + 
+                                    pixels[2, i+1, 2:w:2])
+    
+    # G channel, once row at the time.
+    # We determine the (interpolated) green value at red pixel locations by 
+    # interpolating the four cross green values.
+    # Bottom corner pixel.
+    out[1, -1, -1] = .25 * (pixels[1, -2, -1] + pixels[1, -1, -2])
+    # The rest of the bottom row.
+    out[1, -1, 1:w-2:2] = .25 * (pixels[1, -1, 0:w-3:2] + 
+                                 pixels[1, -1, 2:w:2] + 
+                                 pixels[1, -2, 1:w-2:2])
+    for i in range(1, h-2, 2):
+        # Edge pixel first.
+        out[1, i, -1] = .25 * (pixels[1, i-1, -1] + 
+                               pixels[1, i, -2] + 
+                               pixels[1, i+1, -1])
+        # All the rest.
+        out[1, i, 1:w-2:2] = .25 * (pixels[1, i-1, 1:w-2:2] + 
+                                    pixels[1, i, 0:w-3:2] + 
+                                    pixels[1, i, 2:w:2] + 
+                                    pixels[1, i+1, 1:w-2:2])
+    
+    # We determine the (interpolated) green value at blue pixel locations by 
+    # interpolating the four cross green values.
+    # Top corner pixel.
+    out[1, 0, 0] = .25 * (pixels[1, 0, 1] + pixels[1, 1, 0])
+    # The rest of the top row.
+    out[1, 0, 2:w:2] = .25 * (pixels[1, 0, 1:w-2:2] + 
+                              pixels[1, 0, 3:w:2] + 
+                              pixels[1, 1, 2:w:2])
+    for i in range(2, h, 2):
+        # Edge pixel first.
+        out[1, i, 0] = .25 * (pixels[1, i-1, 0] + 
+                              pixels[1, i, 1] + 
+                              pixels[1, i+1, 0])
+        # All the rest.
+        out[1, i, 2:w:2] = .25 * (pixels[1, i-1, 2:w:2] + 
+                                  pixels[1, i, 1:w-2:2] + 
+                                  pixels[1, i, 3:w:2] + 
+                                  pixels[1, i+1, 2:w:2])
+    return(out)
 
 
 
