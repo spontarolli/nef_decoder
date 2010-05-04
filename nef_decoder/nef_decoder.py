@@ -509,16 +509,7 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     pixels = pixelutils.compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
     
     # Now demosaic the Bayer pattern.
-    demosaiced = pixelutils.demosaic(pixels)
-    print(demosaiced[0, 0, 0], demosaiced[1, 0, 0], demosaiced[2, 0, 0])
-    print(demosaiced[0, 0, 1], demosaiced[1, 0, 1], demosaiced[2, 0, 1])
-    print(demosaiced[0, 0, 2], demosaiced[1, 0, 2], demosaiced[2, 0, 2])
-    print(demosaiced[0, 0, 3], demosaiced[1, 0, 3], demosaiced[2, 0, 3])
-    
-    print(demosaiced[0, 1, 0], demosaiced[1, 1, 0], demosaiced[2, 1, 0])
-    print(demosaiced[0, 1, 1], demosaiced[1, 1, 1], demosaiced[2, 1, 1])
-    print(demosaiced[0, 1, 2], demosaiced[1, 1, 2], demosaiced[2, 1, 2])
-    print(demosaiced[0, 1, 3], demosaiced[1, 1, 3], demosaiced[2, 1, 3])
+    demosaiced = pixelutils.demosaic(pixels, True)
     
     if(verbose):
         from libtiff import TIFF

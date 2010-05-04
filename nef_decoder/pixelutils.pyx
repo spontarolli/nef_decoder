@@ -28,7 +28,7 @@ cdef inline int bintoint(char* bin, int f, int l):
     return(sum)
 
 
-# @cython.boundscheck(False)
+# @cython.boundscheck(True)
 def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas, 
                          list horiz_preds, 
                          list vert_preds, 
@@ -78,11 +78,11 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
                 v = curve[int_boxit_fast(hpreds[col & 1], 0, 0x3fff)]
                 if(c == 3):
                     c = 1
-                pixels[c, row, col] += v
+                pixels[c, row, col] = v
     return(pixels)
 
 
-# @cython.boundscheck(False)
+# @cython.boundscheck(True)
 def decode_pixel_deltas(Py_ssize_t width, 
                         Py_ssize_t height, 
                         int tree_index, 
@@ -194,7 +194,7 @@ def decode_pixel_deltas(Py_ssize_t width,
     return(deltas)
 
 
-def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels):
+def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, bool scale):
     """
     We assume for now that the bayer pattern is 
     
@@ -320,6 +320,10 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels):
                                   pixels[1, i, 1:w-2:2] + 
                                   pixels[1, i, 3:w:2] + 
                                   pixels[1, i+1, 2:w:2])
+    
+    # Now scale it so that we cover the whole dynamic range.
+    if(scale):
+        out *= 65535. / out.max()
     return(out)
 
 
