@@ -509,18 +509,8 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     pixels = pixelutils.compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
     
     # Now demosaic the Bayer pattern.
-    demosaiced = pixelutils.demosaic(pixels, True)
-    
-    if(verbose):
-        from libtiff import TIFF
-        
-        tif = TIFF.open('test_py.tiff', mode='w')
-        tif.write_image(demosaiced.astype(numpy.uint16), write_rgb=True)
-        tif.close()
-        
-    # These are rescaled pixel values. To get the real pixel values we need to
-    # multiply their value by the linearization curve.
-    return(curve)
+    demosaiced = pixelutils.demosaic(pixels, True, False)
+    return(demosaiced)
 
 
 def decode_file(file_name, verbose=False):
@@ -536,21 +526,6 @@ def decode_file(file_name, verbose=False):
 
 
 def decode_nef(data, verbose=False):
-    """
-    Decode the input NEF raw bytes `nef_data` and return the decoded byte 
-    stream.
-    """
-    # Decode the metadata.
-    ifds = decode_nef_header(data, verbose)
-    
-    # Now decode the thumbnail.
-    
-    # Now decode the pixel data.
-    
-    return('Not quite there yet.\n')
-
-
-def decode_nef_header(data, verbose=False):
     """
     The NEF header is a TIFF header:
     
@@ -605,7 +580,7 @@ def decode_nef_header(data, verbose=False):
                                makernote_abs_offset,
                                verbose=verbose)
     
-    return(ifds, makernote_ifd)
+    return(ifds, makernote_ifd, raster)
 
 
 def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
@@ -811,6 +786,9 @@ if(__name__ == '__main__'):
     import optparse
     import sys
     
+    from libtiff import TIFF
+    
+    
     
     # Constants
     USAGE = """NEF Decoder
@@ -858,25 +836,25 @@ Example
     # We have to have an input file name!
     if(not args or not os.path.exists(args[0])):
         parser.error('Please specify an input file.')
+    # And an output file name!
+    if(not options.output_name):
+        parser.error('Please specify the ouput file name.')
     
     # Convert the input file.
     if(options.profile):
         import cProfile
         
         print('Profiler on')
-        cmd = 'output_img = decode_file(args[0], verbose=options.verbose)'
+        cmd = 'metadata, makernote, img = decode_file(args[0], verbose=options.verbose)'
         cProfile.runctx(cmd, globals(), locals(), filename="nef_decoder.prof" )
     else:
         print('Profiler off')
-        output_img = decode_file(args[0], verbose=options.verbose)
+        metadata, makernote, img = decode_file(args[0], verbose=options.verbose)
     
-    # If we do not have an output file name, just write to stdout.
-    if(not options.output_name):
-        sys.stdout.write(output_img)
-        sys.stdout.flush()
-    else:
-        f = open(options.output_name, 'wb')
-        f.write(output_img)
-        f.close()
+    # Write the resulting image.
+    # TODO: handle the metadata!
+    tif = TIFF.open(options.output_name, mode='w')
+    tif.write_image(img.astype(numpy.uint16), write_rgb=True)
+    tif.close()
     sys.exit(0)
 
