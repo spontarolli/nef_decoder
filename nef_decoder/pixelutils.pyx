@@ -194,7 +194,7 @@ def decode_pixel_deltas(Py_ssize_t width,
     return(deltas)
 
 
-def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, bool scale):
+def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, bool scale, bool equalize):
     """
     We assume for now that the bayer pattern is 
     
@@ -323,8 +323,64 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, bool scale):
     
     # Now scale it so that we cover the whole dynamic range.
     if(scale):
+#         out[0] *= 65535. / out[0].max()
+#         out[1] *= 65535. / out[1].max()
+#         out[2] *= 65535. / out[2].max()
         out *= 65535. / out.max()
+    if(equalize):
+        return(histogram_equalize(out))
     return(out)
+
+
+def histogram_equalize(numpy.ndarray[numpy.double_t, ndim=3] pixels):
+    """
+    Histogram equalization, color by color. See
+        http://www.janeriksolem.net/2009/06/histogram-equalization-with-python-and.html
+    """
+    cdef int i
+    cdef tuple shp = (pixels.shape[0], pixels.shape[1], pixels.shape[2])
+    cdef numpy.ndarray[numpy.double_t, ndim=2] out = numpy.zeros(shape=(shp[0], shp[1]*shp[2]),
+                                                                 dtype=numpy.double)
+    cdef numpy.ndarray[numpy.double_t, ndim=1] flat = numpy.zeros(shape=(shp[1]*shp[2], ),
+                                                                  dtype=numpy.double)
+    
+    
+    for i in range(3):
+        flat = pixels[i].flatten()
+        
+        hist, bins = numpy.histogram(flat, 65535, normed=True)
+        cdf = hist.cumsum()
+        cdf = 65535 * cdf / cdf[-1]
+        out[i] = numpy.interp(flat, bins[:-1], cdf)
+    return(out.reshape(shp))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
