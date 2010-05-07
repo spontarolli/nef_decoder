@@ -194,7 +194,10 @@ def decode_pixel_deltas(Py_ssize_t width,
     return(deltas)
 
 
-def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, bool scale, bool equalize):
+def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, 
+             bool scale=True, 
+             bool equalize=False,
+             tuple wb_mult=(1., 1., 1.)):
     """
     We assume for now that the bayer pattern is 
     
@@ -321,12 +324,16 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, bool scale, bool equa
                                   pixels[1, i, 3:w:2] + 
                                   pixels[1, i+1, 2:w:2])
     
+    # Correct for white balance.
+    out[0] *= wb_mult[0]
+    out[1] *= wb_mult[1]
+    out[2] *= wb_mult[2]
+    
     # Now scale it so that we cover the whole dynamic range.
     if(scale):
-#         out[0] *= 65535. / out[0].max()
-#         out[1] *= 65535. / out[1].max()
-#         out[2] *= 65535. / out[2].max()
         out *= 65535. / out.max()
+    
+    # Do we want histogram equalization?
     if(equalize):
         return(histogram_equalize(out))
     return(out)

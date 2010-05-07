@@ -383,8 +383,8 @@ def unpack(fmt, buffer, big_endian=True):
     raise(NotImplementedError('Unsupported format/data type'))
 
 
-def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
-                      verbose=False):
+def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset, 
+                      wb_mult=(1., 1., 1.), verbose=False):
     """
     The linearization table is stored inside the Nikon Marker Note and is >1000
     bytes in length.
@@ -506,26 +506,29 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
     # Now turn all those deltas in pixel values. The only raw pixel value is 
     # the one at top, left for each color. Differences are done color by color.
     # pixels = compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
-    pixels = pixelutils.compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
+    pixels = pixelutils.compute_pixel_values(deltas, 
+                                             horiz_preds, 
+                                             vert_preds, 
+                                             curve)
     
     # Now demosaic the Bayer pattern.
-    demosaiced = pixelutils.demosaic(pixels, True, False)
+    demosaiced = pixelutils.demosaic(pixels, True, False, wb_mult)
     return(demosaiced)
 
 
-def decode_file(file_name, verbose=False):
+def decode_file(file_name, wb_mult=(1., 1., 1.), verbose=False):
     """
     Read `file_name` and pass its content to `decode_nef`. Return the decoded 
     image data.
     """
     # Read the NEF data.
     f = open(file_name, 'rb')
-    output = decode_nef(f, verbose)
+    output = decode_nef(f, wb_mult, verbose)
     f.close()
     return(output)
 
 
-def decode_nef(data, verbose=False):
+def decode_nef(data, wb_mult=(1., 1., 1.), verbose=False):
     """
     The NEF header is a TIFF header:
     
@@ -578,6 +581,7 @@ def decode_nef(data, verbose=False):
                                raw_info, 
                                makernote_ifd, 
                                makernote_abs_offset,
+                               wb_mult,
                                verbose=verbose)
     
     return(ifds, makernote_ifd, raster)
@@ -806,7 +810,7 @@ Options
     -v          verbose (default not vcerbose)
     -o FILE     write the output to FILE. Output type is inferred from file 
                 extension.
-
+    --wb        "r g b" RGB multiplication coefficient for white balance.
 
 Example
     nef_decoder.py -o bar.jpg foo.nef
@@ -818,6 +822,11 @@ Example
                       type='str',
                       default=None,
                       help='name of the output file.')
+    parser.add_option('--wb',
+                      dest='wb_mult',
+                      type='str',
+                      default='1. 1. 1.',
+                      help='white balance coefficients.')
     # Verbose flag
     parser.add_option('-v',
                       action='store_true',
@@ -840,16 +849,24 @@ Example
     if(not options.output_name):
         parser.error('Please specify the ouput file name.')
     
+    # Parse the white balance coefficients.
+    wb_mult = (1., 1., 1.)
+    if(options.wb_mult):
+        try:
+            wb_mult = tuple([float(x) for x in options.wb_mult.split()])
+        except:
+            parser.error('Unable to parse the white balance coefficients.')
+    
     # Convert the input file.
     if(options.profile):
         import cProfile
         
         print('Profiler on')
-        cmd = 'metadata, makernote, img = decode_file(args[0], verbose=options.verbose)'
+        cmd = 'metadata, makernote, img = decode_file(args[0], wb_mult, verbose=options.verbose)'
         cProfile.runctx(cmd, globals(), locals(), filename="nef_decoder.prof" )
     else:
         print('Profiler off')
-        metadata, makernote, img = decode_file(args[0], verbose=options.verbose)
+        metadata, makernote, img = decode_file(args[0], wb_mult, verbose=options.verbose)
     
     # Write the resulting image.
     # TODO: handle the metadata!
