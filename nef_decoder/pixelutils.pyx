@@ -14,6 +14,14 @@ cdef inline int int_boxit_fast(int x, int low, int high):
     return(x)
 
 
+cdef inline double double_boxit_fast(double x, double low, double high):
+    if(x < low):
+        return(low)
+    elif(x > high):
+        return(high)
+    return(x)
+
+
 cdef inline int bintoint(char* bin, int f, int l):
     # Convert the binary string `bin` of length `len` into an integer.
     # We assume that bin is a string composed of '1's and '0's only but we do 
@@ -29,7 +37,7 @@ cdef inline int bintoint(char* bin, int f, int l):
 
 
 # @cython.boundscheck(True)
-def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas, 
+def compute_pixel_values(numpy.ndarray[numpy.double_t, ndim=2] deltas, 
                          list horiz_preds, 
                          list vert_preds, 
                          tuple curve, 
@@ -56,12 +64,12 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
     cdef Py_ssize_t c = 0
     cdef Py_ssize_t v = 0
     cdef int curve_len = len(curve) - 1
-    cdef numpy.ndarray[numpy.uint16_t, ndim=3] pixels = numpy.zeros(shape=(3, h, w), 
-                                                                   dtype=numpy.uint16)
-    cdef numpy.ndarray[numpy.uint16_t, ndim=2] vpreds = numpy.array(vert_preds, 
-                                                                   dtype=numpy.uint16)
-    cdef numpy.ndarray[numpy.uint16_t, ndim=1] hpreds = numpy.array(horiz_preds, 
-                                                                   dtype=numpy.uint16)
+    cdef numpy.ndarray[numpy.double_t, ndim=3] pixels = numpy.zeros(shape=(3, h, w), 
+                                                                    dtype=numpy.double)
+    cdef numpy.ndarray[numpy.double_t, ndim=2] vpreds = numpy.array(vert_preds, 
+                                                                    dtype=numpy.double)
+    cdef numpy.ndarray[numpy.double_t, ndim=1] hpreds = numpy.array(horiz_preds, 
+                                                                    dtype=numpy.double)
     
     # Now, the algorithm above returns colors in RGBG instead of RGBA, so we 
     # have to add plane 3 to plane 1.
@@ -75,10 +83,10 @@ def compute_pixel_values(numpy.ndarray[numpy.int16_t, ndim=2] deltas,
             
             if(col < real_width):
                 c = (filters >> ((((row) << 1 & 14) + ((col-left_margin) & 1)) << 1) & 3)
-                v = curve[int_boxit_fast(hpreds[col & 1], 0, 0x3fff)]
+                v = curve[<int>double_boxit_fast(hpreds[col & 1], 0, 0x3fff)]
                 if(c == 3):
                     c = 1
-                pixels[c, row, col] = v
+                pixels[c, row, col] = <double>v
     return(pixels)
 
 
@@ -112,8 +120,8 @@ def decode_pixel_deltas(Py_ssize_t width,
     cdef int delta = 0
     cdef Py_ssize_t row = 0
     cdef Py_ssize_t col = 0
-    cdef numpy.ndarray[numpy.int16_t, ndim=2] deltas = numpy.zeros(shape=(height, width), 
-                                                                   dtype=numpy.int16)
+    cdef numpy.ndarray[numpy.double_t, ndim=2] deltas = numpy.zeros(shape=(height, width), 
+                                                                    dtype=numpy.double)
     cdef char* bit_buffer_ptr = <char*>bit_buffer.data
     
     
@@ -194,7 +202,7 @@ def decode_pixel_deltas(Py_ssize_t width,
     return(deltas)
 
 
-def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels, 
+def demosaic(numpy.ndarray[numpy.double_t, ndim=3] pixels, 
              bool scale=True, 
              bool equalize=False,
              tuple wb_mult=(1., 1., 1.)):
@@ -208,13 +216,12 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels,
         
         0 B G B G 0
         0 G R G R 0
+    
+    We modify the array in place.
     """
     cdef int i
     cdef int h = pixels.shape[1]
     cdef int w = pixels.shape[2]
-    
-    # Create the output image the same size as the input image.
-    cdef numpy.ndarray[numpy.double_t, ndim=3] out = pixels.astype(numpy.double).copy()
     
     # In what follows, we take care of the fact that the pixels at the edges 
     # require special handlimng. The same thing could be achieved by expanding 
@@ -227,28 +234,28 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels,
     # Horizontals.
     for i in range(1, h, 2):
         # First the border pixels.
-        out[0, i, 0] = .5 * pixels[0, i, 1]
+        pixels[0, i, 0] = .5 * pixels[0, i, 1]
         # Then all the rest.
-        out[0, i, 2:w:2] = .5 * (pixels[0, i, 1:w-2:2] + pixels[0, i, 3:w:2])
+        pixels[0, i, 2:w:2] = .5 * (pixels[0, i, 1:w-2:2] + pixels[0, i, 3:w:2])
     # Verticals.
     # First the top row.
-    out[0, 0, 1:w:2] = .5 * pixels[0, 1, 1:w:2]
+    pixels[0, 0, 1:w:2] = .5 * pixels[0, 1, 1:w:2]
     for i in range(2, h-1, 2):
         # Then everything else.
-        out[0, i, 1:w:2] = .5 * (pixels[0, i-1, 1:w:2] + 
+        pixels[0, i, 1:w:2] = .5 * (pixels[0, i-1, 1:w:2] + 
                                  pixels[0, i+1, 1:w:2])
     
     # We determine the (interpolated) red value at blue pixel locations by 
     # interpolating the four diagonal red values.
     # Top corner pixel.
-    out[0, 0, 0] = .25 * pixels[0, 1, 1]
+    pixels[0, 0, 0] = .25 * pixels[0, 1, 1]
     # The rest of the top row.
-    out[0, 0, 2:w:2] = .25 * (pixels[0, 1, 1:w-2:2] + pixels[0, 1, 3:w:2])
+    pixels[0, 0, 2:w:2] = .25 * (pixels[0, 1, 1:w-2:2] + pixels[0, 1, 3:w:2])
     for i in range(2, h, 2):
         # Edge pixel first.
-        out[0, i, 0] = .25 * (pixels[0, i-1, 1] + pixels[0, i+1, 1])
+        pixels[0, i, 0] = .25 * (pixels[0, i-1, 1] + pixels[0, i+1, 1])
         # All the rest.
-        out[0, i, 2:w:2] = .25 * (pixels[0, i-1, 1:w-2:2] + 
+        pixels[0, i, 2:w:2] = .25 * (pixels[0, i-1, 1:w-2:2] + 
                                   pixels[0, i-1, 3:w:2] + 
                                   pixels[0, i+1, 1:w-2:2] + 
                                   pixels[0, i+1, 3:w:2])
@@ -259,28 +266,28 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels,
     # Horizontals.
     for i in range(0, h, 2):
         # The last column.
-        out[2, i, -1] = .5 * pixels[2, i, -2]
+        pixels[2, i, -1] = .5 * pixels[2, i, -2]
         # The rest.
-        out[2, i, 1:w-2:2] = .5 * (pixels[2, i, 0:w-3:2] + pixels[2, i, 2:w:2])
+        pixels[2, i, 1:w-2:2] = .5 * (pixels[2, i, 0:w-3:2] + pixels[2, i, 2:w:2])
     # Verticals.
     # First the bottom row.
-    out[2, -1, 0:w:2] = .5 * pixels[2, -2, 0:w:2]
+    pixels[2, -1, 0:w:2] = .5 * pixels[2, -2, 0:w:2]
     for i in range(1, h-2, 2):
         # Then all the rest.
-        out[2, i, 0:w:2] = .5 * (pixels[2, i-1, 0:w:2] + 
+        pixels[2, i, 0:w:2] = .5 * (pixels[2, i-1, 0:w:2] + 
                                  pixels[2, i+1, 0:w:2])
     
     # We determine the (interpolated) blue value at red pixel locations by 
     # interpolating the four diagonal blue values.
     # Bottom corner pixel.
-    out[2, -1, -1] = .25 * pixels[2, -2, -2]
+    pixels[2, -1, -1] = .25 * pixels[2, -2, -2]
     # The rest of the bottom row.
-    out[2, -1, 1:w-2:2] = .25 * (pixels[2, -2, 0:w-3:2] + pixels[2, -2, 2:w:2])
+    pixels[2, -1, 1:w-2:2] = .25 * (pixels[2, -2, 0:w-3:2] + pixels[2, -2, 2:w:2])
     for i in range(1, h-2, 2):
         # Edge pixel first.
-        out[2, i, -1] = .25 * (pixels[2, i-1, -2] + pixels[2, i+1, -2])
+        pixels[2, i, -1] = .25 * (pixels[2, i-1, -2] + pixels[2, i+1, -2])
         # All the rest.
-        out[2, i, 1:w-2:2] = .25 * (pixels[2, i-1, 0:w-3:2] + 
+        pixels[2, i, 1:w-2:2] = .25 * (pixels[2, i-1, 0:w-3:2] + 
                                     pixels[2, i-1, 2:w:2] + 
                                     pixels[2, i+1, 0:w-3:2] + 
                                     pixels[2, i+1, 2:w:2])
@@ -289,18 +296,18 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels,
     # We determine the (interpolated) green value at red pixel locations by 
     # interpolating the four cross green values.
     # Bottom corner pixel.
-    out[1, -1, -1] = .25 * (pixels[1, -2, -1] + pixels[1, -1, -2])
+    pixels[1, -1, -1] = .25 * (pixels[1, -2, -1] + pixels[1, -1, -2])
     # The rest of the bottom row.
-    out[1, -1, 1:w-2:2] = .25 * (pixels[1, -1, 0:w-3:2] + 
+    pixels[1, -1, 1:w-2:2] = .25 * (pixels[1, -1, 0:w-3:2] + 
                                  pixels[1, -1, 2:w:2] + 
                                  pixels[1, -2, 1:w-2:2])
     for i in range(1, h-2, 2):
         # Edge pixel first.
-        out[1, i, -1] = .25 * (pixels[1, i-1, -1] + 
+        pixels[1, i, -1] = .25 * (pixels[1, i-1, -1] + 
                                pixels[1, i, -2] + 
                                pixels[1, i+1, -1])
         # All the rest.
-        out[1, i, 1:w-2:2] = .25 * (pixels[1, i-1, 1:w-2:2] + 
+        pixels[1, i, 1:w-2:2] = .25 * (pixels[1, i-1, 1:w-2:2] + 
                                     pixels[1, i, 0:w-3:2] + 
                                     pixels[1, i, 2:w:2] + 
                                     pixels[1, i+1, 1:w-2:2])
@@ -308,35 +315,35 @@ def demosaic(numpy.ndarray[numpy.uint16_t, ndim=3] pixels,
     # We determine the (interpolated) green value at blue pixel locations by 
     # interpolating the four cross green values.
     # Top corner pixel.
-    out[1, 0, 0] = .25 * (pixels[1, 0, 1] + pixels[1, 1, 0])
+    pixels[1, 0, 0] = .25 * (pixels[1, 0, 1] + pixels[1, 1, 0])
     # The rest of the top row.
-    out[1, 0, 2:w:2] = .25 * (pixels[1, 0, 1:w-2:2] + 
+    pixels[1, 0, 2:w:2] = .25 * (pixels[1, 0, 1:w-2:2] + 
                               pixels[1, 0, 3:w:2] + 
                               pixels[1, 1, 2:w:2])
     for i in range(2, h, 2):
         # Edge pixel first.
-        out[1, i, 0] = .25 * (pixels[1, i-1, 0] + 
+        pixels[1, i, 0] = .25 * (pixels[1, i-1, 0] + 
                               pixels[1, i, 1] + 
                               pixels[1, i+1, 0])
         # All the rest.
-        out[1, i, 2:w:2] = .25 * (pixels[1, i-1, 2:w:2] + 
+        pixels[1, i, 2:w:2] = .25 * (pixels[1, i-1, 2:w:2] + 
                                   pixels[1, i, 1:w-2:2] + 
                                   pixels[1, i, 3:w:2] + 
                                   pixels[1, i+1, 2:w:2])
     
     # Correct for white balance.
-    out[0] *= wb_mult[0]
-    out[1] *= wb_mult[1]
-    out[2] *= wb_mult[2]
+    pixels[0] *= wb_mult[0]
+    pixels[1] *= wb_mult[1]
+    pixels[2] *= wb_mult[2]
     
     # Now scale it so that we cover the whole dynamic range.
     if(scale):
-        out *= 65535. / out.max()
+        pixels *= 65535. / pixels.max()
     
     # Do we want histogram equalization?
     if(equalize):
-        return(histogram_equalize(out))
-    return(out)
+        return(histogram_equalize(pixels))
+    return(pixels)
 
 
 def histogram_equalize(numpy.ndarray[numpy.double_t, ndim=3] pixels):
