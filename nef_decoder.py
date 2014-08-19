@@ -2,8 +2,8 @@
 """
 NEF Decoder
 
-Decode a NEF file and turn it into a TIFF or JPEG, depending on user-specified 
-output file extension. If no output file is specified, the input NEF is 
+Decode a NEF file and turn it into a TIFF or JPEG, depending on user-specified
+output file extension. If no output file is specified, the input NEF is
 converted to TIFF and simply printed to STDOUT.
 
 
@@ -13,7 +13,7 @@ Usage
 
 Options
     -v          verbose (default not vcerbose)
-    -o FILE     write the output to FILE. Output type is inferred from file 
+    -o FILE     write the output to FILE. Output type is inferred from file
                 extension.
 
 
@@ -60,7 +60,7 @@ EXIF_TAGS = dict([(1,    'Firmware'),
                   (25,   'AE Bracket Compensation'),
                   (27,   'Sensor Size'),
                   (29,   'D2X Serial Number'),
-                  
+
                   (128,  'Image Adjustment'),
                   (129,  'Tone Compensation'),
                   (130,  'Lens Adapter'),
@@ -91,48 +91,48 @@ EXIF_TAGS = dict([(1,    'Firmware'),
                   (169,  'Image Optimization'),
                   (170,  'Saturation'),
                   (171,  'Vari Program'),
-                  
+
                   (254,  'Image Type'),
                   (256,  'Image Width'),
                   (257,  'Image Height'),
                   (258,  'Image Bits Per Sample'),
                   (259,  'Image Compression'),
                   (262,  'Image Pixel Array Type'),
-                  
+
                   (271,  'Camera Make'),
                   (272,  'Camera Model'),
                   (273,  'Image Offset'),
                   (274,  'Image Orientation'),
-                  
+
                   (277,  'Image Samples Per Pixel'),
                   (278,  'Image Rows Per Strip'),
                   (279,  'Image Bytes Per Strip'),
-                  
+
                   (282,  'Image X-Axis Resolution'),
                   (283,  'Image Y-Axis Resolution'),
                   (284,  'Image Planar Configuration'),
-                  
+
                   (296,  'Image Resolution Units'),
-                  
+
                   (305,  'Software String'),
                   (306,  'Modification Date'),
-                  
+
                   (330,  'Child IFD Offsets'),
-                  
+
                   (532,  'Black/White Pixel Values'),
-                  
+
                   (3584, 'Print IM'),
                   (3585, 'Capture Editor Data'),
                   (3598, 'Capture Offsets'),
-                  
+
                   (34665, 'EXIF IFD Offset'),
-                  
+
                   (36867, 'Original Date'),
-                  
+
                   (37398, 'TIFF-EP Standard ID'),
-                  
+
                   (33434, 'Exposure Time'),
-                  
+
                   (33437, 'f Stop'),
                   (34850, 'Exposure Program'),
                   (36868, 'Exposure Date'),
@@ -142,10 +142,10 @@ EXIF_TAGS = dict([(1,    'Firmware'),
                   (37384, 'White Balance Preset'),
                   (37385, 'Flash'),
                   (37386, 'Focal Length'),
-                  
+
                   (37500, 'Makernote'),
-                  
-                  (37510, 'User Comments'),        
+
+                  (37510, 'User Comments'),
                   (37520, 'Sub-Second Time'),
                   (37521, 'Sub-Second Time Original'),
                   (37522, 'Sub-Second Time Exposure'),
@@ -263,7 +263,7 @@ VERBOSE_TAG_FMT = '0x%04x  %s  %s  %02d  %s'
 
 
 
-def get_raw_image_info(ifds, 
+def get_raw_image_info(ifds,
                        img_type_tag_id=IMAGE_TYPE_TAG_ID,
                        img_width_tag_id=IMAGE_WIDTH_TAG_ID,
                        img_height_tag_id=IMAGE_HEIGHT_TAG_ID,
@@ -292,7 +292,10 @@ def get_raw_image_info(ifds,
             info['img_compression'] = ifd[img_compression_tag_id][-1]
             info['img_array_type'] = ifd[img_array_type_tag_id][-1]
             info['img_offset'] = ifd[img_offset_tag_id][-1]
-            info['img_orientation'] = ifd[img_orientation_tag_id][-1]
+            try:
+                info['img_orientation'] = ifd[img_orientation_tag_id][-1]
+            except:
+                info['img_orientation'] = 0
             info['img_spp'] = ifd[img_spp_tag_id][-1]
             info['img_rpstrip'] = ifd[img_rpstrip_tag_id][-1]
             info['img_bpstrip'] = ifd[img_bpstrip_tag_id][-1]
@@ -318,7 +321,7 @@ def get_tag_value(ifds, tag_id, tag_name=None):
     if(isinstance(ifds, dict)):
         # We just have a single IFD! Create a temp list with just this element.
         ifds = [ifds, ]
-    
+
     # FIXME: use a random number/string instead of None.
     val = None
     for ifd in ifds:
@@ -327,7 +330,7 @@ def get_tag_value(ifds, tag_id, tag_name=None):
         if(not ifd.has_key(tag_id) or
            (tag_name != None and ifd[tag_id][1] != tag_name)):
             continue
-        
+
         val = ifd[tag_id][-1]
     if(val == None and tag_name == None):
         raise(Exception('Tag ID %d not found.' % (tag_id)))
@@ -349,7 +352,7 @@ def unpack(fmt, buffer, big_endian=True):
         prefix = '>'
     else:
         prefix = '<'
-    
+
     if(not fmt or fmt == '_str'):
         return(str(buffer))
     elif((fmt == '_urational' or fmt == '_rational') and len(buffer) % 8 == 0):
@@ -357,18 +360,18 @@ def unpack(fmt, buffer, big_endian=True):
             fmt = prefix + 'L'
         else:
             fmt = prefix + 'l'
-        
+
         i = 4
         n = len(buffer)
         i_max = n - 4
         res = []
         while(i <= i_max):
-            a = int(''.join([str(x) for x in 
+            a = int(''.join([str(x) for x in
                              struct.unpack(fmt, buffer[i-4:i])]))
-            b = int(''.join([str(x) for x in 
+            b = int(''.join([str(x) for x in
                              struct.unpack(fmt, buffer[i:i+4])]))
             res.append('%d / %d' % (a, b))
-            
+
             i += 8
         return(res)
     elif(fmt == '_rational' and len(buffer) != 8):
@@ -383,12 +386,12 @@ def unpack(fmt, buffer, big_endian=True):
     raise(NotImplementedError('Unsupported format/data type'))
 
 
-def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset, 
+def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
                       wb_mult=(1., 1., 1.), verbose=False):
     """
     The linearization table is stored inside the Nikon Marker Note and is >1000
     bytes in length.
-    
+
     The format is as follows: (start=initial_offset+base_offset)
         1   byte    version0
         1   byte    version1
@@ -396,42 +399,42 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
         4   short   vert_preds[2 x 2]
         1   short   curve length (n)
         n   short   curve values
-    (if version0==0x44 and version1==0x20: 
+    (if version0==0x44 and version1==0x20:
         data.seek(start+562, os.SEEK_SET)
         1   short   split value)
-        
+
     """
     # Get the NEF compression flag.
     compression = makernote_ifd[NEF_COMPRESSION_TAG_ID][-1]
-    
+
     # Get the image bits per sample (either 12 or 14 ususally).
     image_bps = raw_info['img_bps']
-    
+
     # Get the abs offset to the linearization curve.
     [abs_offset, tag, typ_fmt, l, val] = makernote_ifd[NIKON_LINCURVE_TAG_ID]
-    
+
     # Remember that val is already a list of l elements of type typ_fmt.
     data.seek(abs_offset, os.SEEK_SET)
-    
+
     # See is we have to do any reading from data.
     if(typ_fmt == 'B'):
         v0, v1 = val[:2]
         data.seek(2, os.SEEK_CUR)       # keep track of where we are in data.
     else:
         v0, v1 = unpack('BB', data.read(2))
-    
+
     # Choose the appropriate NIKON Huffman tree index.
     tree_index = 0
     if(v0 == 0x46):
         tree_index = 2
     if(image_bps == 14):
         tree_index += 3
-    
+
     # For some combination of v0 and v1 we need to seek ahead a fixed ammount.
     if(v0 == 0x49 or v1 == 0x58):
         # FIXME: is it correct? Do we need to add 2 (see dcraw.c:1137)?
         data.seek(abs_offset + 2 + 2110, os.SEEK_SET)
-    
+
     # Read the vertical predictor 2x2 matrix.
     # TODO: simple optimization: use the bytes in val rather than reading data.
     horiz_preds = [0, 0]
@@ -440,32 +443,32 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
      vert_preds[0][1],
      vert_preds[1][0],
      vert_preds[1][1]) = unpack('HHHH', data.read(8))
-    
+
     max = 1 << image_bps & 0x7fff
     num_points = unpack('H', data.read(2))[0]
     if(num_points > 1):
         step = int(float(max) / (num_points - 1))
     values = unpack('H'*num_points, data.read(num_points * 2))
-    
+
     # Decode the curve.
     curve = None
     split_row = -1
     if(v0 == 0x44 and v1 == 0x20 and step > 0):
         curve_max_len = 1 << tiff_bps & 0x7fff
-        
+
         # The curve has length `curve_max_len` but we only have a `num_points`
         # points, so we need to interpolate.
         step = int(float(curve_max_len) / float(curve_size - 1))
         curve = [0, ] * curve_max_len
         for i in xrange(num_points):
             curve[i*step] = values[i]
-        
+
         # Now interpolate between those values.
         step = float(step)
         for i in xrange(curve_max_len):
             curve[i] = int(float(curve[i-i%step] * (step-i%step) +
                                  curve[i-i%step+step] * (i%step)) / step)
-        
+
         # Finally, get the 'split value'. This is the row where we need to
         # re-init the Huffman tree.
         data.seek(abs_offset + 562, os.SEEK_SET)
@@ -476,41 +479,41 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
         curve_max_len = num_points
     else:
         raise(Exception('Unsupported Nikon linearization curve.'))
-    
-    # Sometimes curve elements are repeated at the end. Get the number of 
+
+    # Sometimes curve elements are repeated at the end. Get the number of
     # distinct elements.
     while(curve[curve_max_len-2] == curve[curve_max_len-1]):
         curve_max_len -= 1
-    
+
     # Now decode the pixel values. This is a bit of a mess, but not too bad.
     pixel_abs_offset = raw_info['img_offset']
     data.seek(pixel_abs_offset, os.SEEK_SET)
-    
+
     # Get the image size.
     width = raw_info['img_width']
     height = raw_info['img_height']
-    
+
     # Cast data into a string of bits of length width * height * 8
     byte_buffer = numpy.fromfile(data, dtype=numpy.uint8)
-    bit_buffer = numpy.ascontiguousarray(numpy.unpackbits(byte_buffer), 
+    bit_buffer = numpy.ascontiguousarray(numpy.unpackbits(byte_buffer),
                                          dtype=numpy.uint8)
-    
+
     # Decode the actual pixel differences/deltas.
-    deltas = pixelutils.decode_pixel_deltas(width, 
-                                            height, 
-                                            tree_index, 
-                                            bit_buffer, 
+    deltas = pixelutils.decode_pixel_deltas(width,
+                                            height,
+                                            tree_index,
+                                            bit_buffer,
                                             split_row,
                                             NIKON_TREE)
-    
-    # Now turn all those deltas in pixel values. The only raw pixel value is 
+
+    # Now turn all those deltas in pixel values. The only raw pixel value is
     # the one at top, left for each color. Differences are done color by color.
     # pixels = compute_pixel_values(deltas, horiz_preds, vert_preds, curve)
-    pixels = pixelutils.compute_pixel_values(deltas, 
-                                             horiz_preds, 
-                                             vert_preds, 
+    pixels = pixelutils.compute_pixel_values(deltas,
+                                             horiz_preds,
+                                             vert_preds,
                                              curve)
-    
+
     # Now demosaic the Bayer pattern.
     demosaiced = pixelutils.demosaic(pixels, True, False, wb_mult)
     return(demosaiced)
@@ -518,7 +521,7 @@ def decode_pixel_data(data, raw_info, makernote_ifd, makernote_abs_offset,
 
 def decode_file(file_name, wb_mult=(1., 1., 1.), verbose=False):
     """
-    Read `file_name` and pass its content to `decode_nef`. Return the decoded 
+    Read `file_name` and pass its content to `decode_nef`. Return the decoded
     image data.
     """
     # Read the NEF data.
@@ -531,20 +534,20 @@ def decode_file(file_name, wb_mult=(1., 1., 1.), verbose=False):
 def decode_nef(data, wb_mult=(1., 1., 1.), verbose=False):
     """
     The NEF header is a TIFF header:
-    
+
     2 bytes:    endianess. Usually "MM" (i.e. big-endian)
     2 bytes:    TIFF magic number 0x002a
     4 bytes:    TIFF offset
     n bytes:    the rest (meaning M IFDs, pixel data etc.)
     """
-    # Make sure that the file is big-endian. If not, then we have a problem 
+    # Make sure that the file is big-endian. If not, then we have a problem
     # since NEFs are always supposed to be big-endian...
     if(data.read(2) != 'MM'):
         data.close()
         raise(Exception('File is little-endian. Are you sure it is a NEF?'))
     if(verbose == 2):
         print('The file is big-endian.')
-    
+
     # Now get the version and the offset to the first directory. Version should
     # be 42.
     version = unpack('H', data.read(2))[0]
@@ -555,35 +558,35 @@ def decode_nef(data, wb_mult=(1., 1., 1.), verbose=False):
     if(verbose == 2):
         print('Version:                                         %d' % (version))
         print('Offet to first IFD:                              %d' % (offset))
-    
-    # Now decode each IFD (Image File Directory) iteratively. 
-    ifds = decode_ifd(data, 
-                      initial_offset=offset, 
-                      tags=EXIF_TAGS, 
+
+    # Now decode each IFD (Image File Directory) iteratively.
+    ifds = decode_ifd(data,
+                      initial_offset=offset,
+                      tags=EXIF_TAGS,
                       makernote_tag=EXIF_TAGS[MAKERNOTE_TAG_ID],
                       verbose=verbose)
-    
+
     # Get the Makernote offset. If we do not have it, we are in trouble.
-    makernote_abs_offset = get_tag_value(ifds, 
-                                         tag_id=MAKERNOTE_TAG_ID, 
+    makernote_abs_offset = get_tag_value(ifds,
+                                         tag_id=MAKERNOTE_TAG_ID,
                                          tag_name=EXIF_TAGS[MAKERNOTE_TAG_ID])
     # Decode the Makernote.
-    makernote_ifd = decode_makernote(data, 
-                                     initial_offset=makernote_abs_offset, 
+    makernote_ifd = decode_makernote(data,
+                                     initial_offset=makernote_abs_offset,
                                      verbose=verbose)
-    
+
     # Get the RAW image bits per sample value, size etc.
     raw_info = get_raw_image_info(ifds, verbose=verbose)
-    
+
     # Now decode the raw pixels.
     # TODO: put this somewhere else.
-    raster = decode_pixel_data(data, 
-                               raw_info, 
-                               makernote_ifd, 
+    raster = decode_pixel_data(data,
+                               raw_info,
+                               makernote_ifd,
                                makernote_abs_offset,
                                wb_mult,
                                verbose=verbose)
-    
+
     return(ifds, makernote_ifd, raster)
 
 
@@ -591,7 +594,7 @@ def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     """
     The Nikon Makernote has a format wich is somewhat similar to that of the
     .NEF file itself:
-    
+
     6 bytes:    "Nikon" string
     2 bytes:    version (short)? Usually 0x0210
     2 bytes:    unknown (short)? Usually 0x0000
@@ -599,23 +602,23 @@ def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     2 bytes:    TIFF magic number 0x002a
     4 bytes:    TIFF offset
     n bytes:    IFD
-    
-    So, apart from the first 10 bytes, the structure is identical to the .NEF 
+
+    So, apart from the first 10 bytes, the structure is identical to the .NEF
     file itself. This also means that the offsets specified as tag value (when
     the type_length * tag_length > 4 bytes) are *relative* to the beginning of
     this 'fake' TIFF (i.e. initial_offset + 10).
     """
     base_offset = initial_offset + 10
     data.seek(base_offset)
-    
-    # Make sure that the file is big-endian. If not, then we have a problem 
+
+    # Make sure that the file is big-endian. If not, then we have a problem
     # since NEFs are always supposed to be big-endian...
     if(data.read(2) != 'MM'):
         data.close()
         raise(Exception('File is little-endian. Are you sure it is a NEF?'))
     if(verbose == 2):
         print('The file is big-endian.')
-    
+
     # Now get the version and the offset to the first directory. Version should
     # be 42.
     version = unpack('H', data.read(2))[0]
@@ -627,8 +630,8 @@ def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     if(verbose == 2):
         print('Version:                                         %d' % (version))
         print('Offet to Makernote IFD:                          %d' % (offset))
-    
-    [makernote_ifd, ] = decode_ifd(data, 
+
+    [makernote_ifd, ] = decode_ifd(data,
                                    initial_offset=offset,
                                    tags=NIKON_TAGS,
                                    makernote_tag=None,
@@ -637,23 +640,23 @@ def decode_makernote(data, initial_offset, tags=NIKON_TAGS, verbose=False):
     return(makernote_ifd)
 
 
-def decode_ifd(data, 
-               initial_offset, 
-               tags=EXIF_TAGS, 
-               makernote_tag=EXIF_TAGS[MAKERNOTE_TAG_ID], 
+def decode_ifd(data,
+               initial_offset,
+               tags=EXIF_TAGS,
+               makernote_tag=EXIF_TAGS[MAKERNOTE_TAG_ID],
                base_offset=0,           # It is != 0 only for Nikon Makernote.
                verbose=False):
     # IFDs have the format:
     #   2 bytes     number of tags/entries in the IFD.
     #   12 bytes    for each IFD entry (times the number of tags).
     #   4 bytes     offset to the next IFD.
-    # 
+    #
     # IFD entries have the format:
     #   2 bytes     tag id.
     #   2 bytes     tag type.
     #   4 bytes     tag value length.
     #   4 bytes     either tag value of offset to tag value (if length > 4).
-    # 
+    #
     # Tag types:
     #   1   byte
     #   2   string
@@ -668,26 +671,26 @@ def decode_ifd(data,
     #   11  float
     #   12  double
     dirs = []
-    
+
     # We usually have 4 child IFDs: EXIF, Preview, Raw and Makernote.
     relative_offsets = [initial_offset, ]
-    
-    # From here below all offsets are relative to base_offset. Of course 
+
+    # From here below all offsets are relative to base_offset. Of course
     # base_offset is 0 for all IFDs *but* the Nikon Makernote.
     while(relative_offsets):
         relative_offset = relative_offsets.pop()
         abs_offset = relative_offset + base_offset
-        
+
         if(verbose == 2):
             print('Abs Offset:                                  %d' \
                   %(base_offset + relative_offset))
         if(not relative_offset):
             continue
-        
+
         # Start parsing a new IFD.
         dir = {}
         data.seek(abs_offset, os.SEEK_SET)
-        
+
         # Parse the directory content.
         n = unpack('H', data.read(2))[0]
         if(verbose == 2):
@@ -696,43 +699,43 @@ def decode_ifd(data,
         while(n):
             if(verbose == 2):
                 print('We are at %d' % (data.tell()))
-            
+
             tag_id = unpack('H', data.read(2))[0]
             tag = tags.get(tag_id, 'Unknown Tag')
             typ_id = unpack('H', data.read(2))[0]
             typ_fmt, typ_size = TYPES.get(typ_id, DEF_TYPE)
             len = unpack('I', data.read(4))[0]
             val_abs_offset = data.tell()
-            
+
             unpack_fmt = typ_fmt
             if(typ_fmt != None and not typ_fmt[0] == '_'):
                 unpack_fmt = len * typ_fmt
-            
+
             unpack_bytes = []
             val_size = typ_size * len
             if(val_size > 4):
                 new_relative_offset = unpack('I', data.read(4))[0]
                 new_abs_offset = new_relative_offset + base_offset
                 val_abs_offset = new_abs_offset
-                
-                # Special handling for the Marker Note: we do not store the 
+
+                # Special handling for the Marker Note: we do not store the
                 # value, but rather just the offset as value.
                 if(makernote_tag and tag == makernote_tag):
-                    dir[tag_id] = [new_abs_offset, tag, typ_fmt, len, 
+                    dir[tag_id] = [new_abs_offset, tag, typ_fmt, len,
                                    new_abs_offset]
                     # Decrement n and go to the next entry.
                     n -= 1
                     continue
-                
+
                 # Go there...
                 here = data.tell()
                 data.seek(new_abs_offset, os.SEEK_SET)
                 if(verbose == 2):
                     print('Jump to %d' % (new_abs_offset))
-                
+
                 # Read the data to decode.
                 unpack_bytes = data.read(val_size)
-                
+
                 # ...and back.
                 data.seek(here, os.SEEK_SET)
                 if(verbose == 2):
@@ -740,44 +743,44 @@ def decode_ifd(data,
             else:
                 # Read the data to decode (4 bytes in this case).
                 unpack_bytes = data.read(4)
-                
+
                 # Do we need padding (only if the data size would be < 4 bytes)?
-                if(val_size < 4 and 
-                   typ_fmt != None and 
+                if(val_size < 4 and
+                   typ_fmt != None and
                    not typ_fmt[0] == '_'):
                     pad = 'x' * (4 - val_size)
                     unpack_fmt += pad
-            
+
             # Decode the tag value. This is always a tuple/list.
             val = unpack(unpack_fmt, unpack_bytes)
-            
+
             # Did we get one of the child offsets?
             if(tag_id in CHILD_IFD_TAGS):
                 relative_offsets += val
-            
-            # Make sure that if len == 1, we only store the value, not a 
+
+            # Make sure that if len == 1, we only store the value, not a
             # singleton.
             if(len == 1):
                 val = val[0]
-            
+
             # Add the tag to the current directory.
             dir[tag_id] = [val_abs_offset, tag, typ_fmt, len, val]
-            
+
             # Decrement the number of entries.
             n -= 1
             if(verbose):
                 print(VERBOSE_TAG_FMT % (tag_id, tag, typ_fmt, len, val))
-        
+
         # Add the current directory to the list of directories.
         dirs.append(dir)
-        
+
         # Get a new offset and start over.
         new_relative_offset = unpack('I', data.read(4))[0]
         if(new_relative_offset != 0):
             relative_offsets.append(new_offset)
     return(dirs)
-    
-    
+
+
 
 
 
@@ -789,16 +792,16 @@ def decode_ifd(data,
 if(__name__ == '__main__'):
     import optparse
     import sys
-    
+
     from libtiff import TIFF
-    
-    
-    
+
+
+
     # Constants
     USAGE = """NEF Decoder
 
-Decode a NEF file and turn it into a TIFF or JPEG, depending on user-specified 
-output file extension. If no output file is specified, the input NEF is 
+Decode a NEF file and turn it into a TIFF or JPEG, depending on user-specified
+output file extension. If no output file is specified, the input NEF is
 converted to TIFF and simply printed to STDOUT.
 
 
@@ -808,13 +811,13 @@ Usage
 
 Options
     -v          verbose (default not vcerbose)
-    -o FILE     write the output to FILE. Output type is inferred from file 
+    -o FILE     write the output to FILE. Output type is inferred from file
                 extension.
     --wb        "r g b" RGB multiplication coefficient for white balance.
 
 Example
     nef_decoder.py -o bar.jpg foo.nef
-""" 
+"""
     # Get user input (tracks file) and make sure that it exists.
     parser = optparse.OptionParser(USAGE)
     parser.add_option('-o', '--output',
@@ -838,17 +841,17 @@ Example
                       dest='profile',
                       default=False)
 
-    
+
     # Get the command line options and also whatever is passed on STDIN.
     (options, args) = parser.parse_args()
-    
+
     # We have to have an input file name!
     if(not args or not os.path.exists(args[0])):
         parser.error('Please specify an input file.')
     # And an output file name!
     if(not options.output_name):
         parser.error('Please specify the ouput file name.')
-    
+
     # Parse the white balance coefficients.
     wb_mult = (1., 1., 1.)
     if(options.wb_mult):
@@ -856,18 +859,18 @@ Example
             wb_mult = tuple([float(x) for x in options.wb_mult.split()])
         except:
             parser.error('Unable to parse the white balance coefficients.')
-    
+
     # Convert the input file.
     if(options.profile):
         import cProfile
-        
+
         print('Profiler on')
         cmd = 'metadata, makernote, img = decode_file(args[0], wb_mult, verbose=options.verbose)'
         cProfile.runctx(cmd, globals(), locals(), filename="nef_decoder.prof" )
     else:
         print('Profiler off')
         metadata, makernote, img = decode_file(args[0], wb_mult, verbose=options.verbose)
-    
+
     # Write the resulting image.
     # TODO: handle the metadata!
     tif = TIFF.open(options.output_name, mode='w')

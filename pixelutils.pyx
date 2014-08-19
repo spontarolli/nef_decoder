@@ -2,7 +2,7 @@
 import numpy
 cimport numpy
 # cimport cython
-
+from cpython cimport bool
 
 
 # Utility routines.
